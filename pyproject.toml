@@ -1,0 +1,15 @@
+[project]
+name = "balidaf"
+version = "1.0.0"
+description = "Balidaf – Balanceo de subsidios - IDAF"
+requires-python = ">=3.8"
+dependencies = ["openpyxl>=3.1"]
+
+[project.scripts]
+balidaf = "balidaf.__main__:main"
+
+[tool.setuptools]
+packages = ["balidaf"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

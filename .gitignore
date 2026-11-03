@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# PyInstaller (salidas de compilación)
+build/
+dist/
+
+# Datos y salidas locales
+data/
+*_balidaf.xlsx
+*_legacy.xlsx
+balidaf_errores.log
+~$*.xlsx
+
+# Editor / SO
+.vscode/*
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+.DS_Store
+Thumbs.db

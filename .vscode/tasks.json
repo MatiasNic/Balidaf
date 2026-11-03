@@ -1,0 +1,28 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Generar Excel de ejemplo",
+      "type": "shell",
+      "command": "${command:python.interpreterPath}",
+      "args": ["scripts/generar_ejemplo.py"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Tests",
+      "type": "shell",
+      "command": "${command:python.interpreterPath}",
+      "args": ["-m", "pytest", "-v"],
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Compilar .exe (PyInstaller)",
+      "type": "shell",
+      "command": "${command:python.interpreterPath}",
+      "args": ["-m", "PyInstaller", "--noconfirm", "--clean", "Balidaf.spec"],
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}
