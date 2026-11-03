@@ -87,57 +87,53 @@ class Aviso(tk.Label):
 
 
 class PanelProgreso(tk.Frame):
-    """Panel grande que muestra que el programa está trabajando: pasos, barra y porcentaje."""
+    """Barra de estado FIJA dentro de la ventana: qué está haciendo, pasos, barra y porcentaje."""
 
     def __init__(self, master):
-        super().__init__(master, bg=CELESTE_CLARO, padx=16, pady=10, highlightthickness=1,
+        super().__init__(master, bg=CELESTE_CLARO, padx=14, pady=6, highlightthickness=1,
                          highlightbackground="#90caf9")
-        self.titulo = tk.Label(self, text="", font=(FUENTE, 12, "bold"), fg=AZUL, bg=CELESTE_CLARO)
-        self.titulo.grid(row=0, column=0, columnspan=3, sticky="w")
-        self.fila_pasos = tk.Frame(self, bg=CELESTE_CLARO)
-        self.fila_pasos.grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 6))
+        self.titulo = tk.Label(self, text="", font=(FUENTE, 10, "bold"), fg=AZUL, bg=CELESTE_CLARO,
+                               width=34, anchor="w")
+        self.titulo.grid(row=0, column=0, sticky="w")
         self.pb = ttk.Progressbar(self, mode="determinate", style="Grande.Horizontal.TProgressbar", maximum=100)
-        self.pb.grid(row=2, column=0, sticky="ew")
-        self.pct = tk.Label(self, text="", font=(FUENTE, 12, "bold"), fg=AZUL, bg=CELESTE_CLARO, width=6)
-        self.pct.grid(row=2, column=1, padx=(10, 0))
-        self.detalle = tk.Label(self, text="", font=(FUENTE, 9), fg=GRIS, bg=CELESTE_CLARO)
-        self.detalle.grid(row=3, column=0, columnspan=3, sticky="w", pady=(4, 0))
-        self.columnconfigure(0, weight=1)
+        self.pb.grid(row=0, column=1, sticky="ew", padx=(8, 8))
+        self.pct = tk.Label(self, text="", font=(FUENTE, 10, "bold"), fg=AZUL, bg=CELESTE_CLARO, width=6, anchor="e")
+        self.pct.grid(row=0, column=2)
+        self.pasos = tk.Label(self, text="", font=(FUENTE, 9), fg=GRIS, bg=CELESTE_CLARO, anchor="w")
+        self.pasos.grid(row=1, column=0, columnspan=3, sticky="w", pady=(3, 0))
+        self.columnconfigure(1, weight=1)
         self._pasos: List[Tuple[str, str]] = []
-        self._labels: Dict[str, tk.Label] = {}
-        self._actual: Optional[str] = None
+        self._estado: Dict[str, str] = {}
         self._indeterminado = False
+        self.reposo("Listo. Elegí un Excel y presioná «Analizar».")
+
+    def _pintar_pasos(self, detalle: str = "") -> None:
+        marcas = {"ok": "✔", "actual": "▶", "": "○"}
+        txt = "   ›   ".join(f"{marcas[self._estado.get(pid, '')]} {nombre}" for pid, nombre in self._pasos)
+        self.pasos.config(text=txt + (f"      —  {detalle}" if detalle else ""))
+
+    def reposo(self, texto: str) -> None:
+        self._set_valor(0, mostrar_pct=False)
+        self.titulo.config(text=f"●  {texto}", fg=GRIS)
+        self.pasos.config(text="")
 
     def iniciar(self, titulo: str, pasos: Sequence[Tuple[str, str]]) -> None:
-        self.titulo.config(text=f"⏳  {titulo}", fg=AZUL)
-        for w in self.fila_pasos.winfo_children():
-            w.destroy()
         self._pasos = list(pasos)
-        self._labels = {}
-        for i, (pid, nombre) in enumerate(self._pasos):
-            if i:
-                tk.Label(self.fila_pasos, text="›", fg=GRIS, bg=CELESTE_CLARO).pack(side="left", padx=6)
-            lb = tk.Label(self.fila_pasos, text=f"○  {nombre}", fg=GRIS, bg=CELESTE_CLARO, font=(FUENTE, 10))
-            lb.pack(side="left")
-            self._labels[pid] = lb
-        self._actual = None
+        self._estado = {}
+        self.titulo.config(text=f"⏳  {titulo}", fg=AZUL)
         self._set_valor(0)
-        self.detalle.config(text="")
+        self._pintar_pasos()
 
     def avanzar(self, paso: str, texto: str, cur: int, tot: int) -> None:
-        if paso in self._labels and paso != self._actual:
-            ids = [p for p, _ in self._pasos]
-            for pid, nombre in self._pasos:
-                lb = self._labels[pid]
+        ids = [p for p, _ in self._pasos]
+        if paso in ids:
+            for pid in ids:
                 if ids.index(pid) < ids.index(paso):
-                    lb.config(text=f"✔  {nombre}", fg=VERDE, font=(FUENTE, 10))
-                elif pid == paso:
-                    lb.config(text=f"▶  {nombre}", fg=AZUL, font=(FUENTE, 10, "bold"))
-            self._actual = paso
-        self.detalle.config(text=texto)
-        # porcentaje global: pasos completos + avance del paso actual
-        n = max(len(self._pasos), 1)
-        idx = [p for p, _ in self._pasos].index(paso) if paso in self._labels else 0
+                    self._estado[pid] = "ok"
+            self._estado[paso] = "actual"
+        self._pintar_pasos(texto)
+        n = max(len(ids), 1)
+        idx = ids.index(paso) if paso in ids else 0
         if tot <= 0:
             if not self._indeterminado:
                 self.pb.config(mode="indeterminate")
@@ -147,20 +143,45 @@ class PanelProgreso(tk.Frame):
         else:
             self._set_valor(100 * (idx + min(cur / tot, 1)) / n)
 
-    def _set_valor(self, v: float) -> None:
+    def _set_valor(self, v: float, mostrar_pct: bool = True) -> None:
         if self._indeterminado:
             self.pb.stop()
             self.pb.config(mode="determinate")
             self._indeterminado = False
         self.pb["value"] = v
-        self.pct.config(text=f"{int(v)} %")
+        self.pct.config(text=f"{int(v)} %" if mostrar_pct else "")
 
     def terminar(self, texto: str, ok: bool = True) -> None:
-        for pid, nombre in self._pasos:
-            self._labels[pid].config(text=f"✔  {nombre}", fg=VERDE, font=(FUENTE, 10))
+        for pid, _ in self._pasos:
+            self._estado[pid] = "ok"
         self._set_valor(100)
         self.titulo.config(text=("✔  " if ok else "✖  ") + texto, fg=VERDE if ok else ROJO)
-        self.detalle.config(text="")
+        self._pintar_pasos()
+
+
+class ComboFiltro(ttk.Frame):
+    """Lista desplegable compacta para filtrar (muestra la cantidad de cada opción)."""
+
+    def __init__(self, master, etiqueta: str, ancho: int, al_elegir: Callable[[str], None]):
+        super().__init__(master)
+        ttk.Label(self, text=etiqueta).pack(side="left")
+        self.var = tk.StringVar()
+        self.cb = ttk.Combobox(self, textvariable=self.var, width=ancho, state="readonly")
+        self.cb.pack(side="left", padx=(4, 0))
+        self.cb.bind("<<ComboboxSelected>>", lambda e: al_elegir(self._mapa.get(self.var.get(), "")))
+        self._mapa: Dict[str, str] = {}
+
+    def cargar(self, opciones: Sequence[Tuple[str, str, int]], actual: str) -> None:
+        """opciones: (valor, texto, cantidad)."""
+        self._mapa = {}
+        textos = []
+        for valor, texto, n in opciones:
+            t = f"{texto}  ({n:,})".replace(",", ".")
+            self._mapa[t] = valor
+            textos.append(t)
+            if valor == actual:
+                self.var.set(t)
+        self.cb.config(values=textos)
 
 
 class Tabla(ttk.Frame):
@@ -170,6 +191,7 @@ class Tabla(ttk.Frame):
                  on_doble_click: Optional[Callable[[str], None]] = None, seleccion: str = "browse"):
         super().__init__(master)
         self.ids = [c[0] for c in columnas]
+        self._titulos = {cid: titulo for cid, titulo, _ in columnas}
         self.tree = ttk.Treeview(self, columns=self.ids, show="headings", height=altura, selectmode=seleccion)
         for cid, titulo, ancho in columnas:
             self.tree.heading(cid, text=titulo, command=lambda c=cid: self.ordenar(c))
@@ -207,6 +229,8 @@ class Tabla(ttk.Frame):
             self.after_cancel(self._job)
             self._job = None
         self.tree.delete(*self.tree.get_children())
+        for cid, titulo in self._titulos.items():
+            self.tree.heading(cid, text=titulo)
 
     def cargar(self, filas: List[Tuple[str, Sequence, Tuple[str, ...]]], lote: int = 1500,
                al_terminar: Optional[Callable[[], None]] = None) -> None:
@@ -238,6 +262,9 @@ class Tabla(ttk.Frame):
         items.sort(key=clave, reverse=desc)
         for i, (_, k) in enumerate(items):
             self.tree.move(k, "", i)
+        for cid, titulo in self._titulos.items():
+            flecha = (" ▼" if desc else " ▲") if cid == col else ""
+            self.tree.heading(cid, text=titulo + flecha)
 
 
 def fila(master, **pack) -> ttk.Frame:
@@ -278,49 +305,3 @@ class Ayuda:
         if self.win:
             self.win.destroy()
             self.win = None
-
-
-class FiltroLateral(ttk.Frame):
-    """Panel izquierdo con secciones de filtros y cantidades (p. ej. Estado / Tipo de corrección)."""
-
-    def __init__(self, master, al_elegir: Callable[[str, str], None], ancho: int = 270):
-        super().__init__(master)
-        st = ttk.Style(self)
-        st.configure("Filtro.Treeview", rowheight=26, font=(FUENTE, 10))
-        self.tree = ttk.Treeview(self, show="tree", selectmode="browse", style="Filtro.Treeview")
-        self.tree.column("#0", width=ancho, minwidth=ancho, stretch=True)
-        self.configure(width=ancho)
-        self.tree.tag_configure("seccion", font=(FUENTE, 10, "bold"), foreground=AZUL)
-        self.tree.tag_configure("cero", foreground="#9aa0a6")
-        self.tree.pack(fill="both", expand=True)
-        self._cb = al_elegir
-        self._cargando = False
-        self.tree.bind("<<TreeviewSelect>>", self._elegir)
-
-    def cargar(self, secciones: Sequence[Tuple[str, str, Sequence[Tuple[str, str, int]]]],
-               seleccion: Optional[str] = None) -> None:
-        """secciones: (id_seccion, título, [(valor, texto, cantidad)])."""
-        self._cargando = True
-        self.tree.delete(*self.tree.get_children())
-        for sid, titulo, items in secciones:
-            self.tree.insert("", "end", iid=sid, text=titulo, open=True, tags=("seccion",))
-            for valor, texto, n in items:
-                cant = f"{n:,}".replace(",", ".")
-                self.tree.insert(sid, "end", iid=f"{sid}|{valor}", text=f"   {texto}   ({cant})",
-                                 tags=("cero",) if n == 0 else ())
-        if seleccion and self.tree.exists(seleccion):
-            self.tree.selection_set(seleccion)
-            self.tree.see(seleccion)
-        self._cargando = False
-
-    def _elegir(self, _e=None):
-        if self._cargando:
-            return
-        sel = self.tree.selection()
-        if sel and "|" in sel[0]:
-            sid, valor = sel[0].split("|", 1)
-            self._cb(sid, valor)
-
-    def seleccionado(self) -> Optional[str]:
-        sel = self.tree.selection()
-        return sel[0] if sel else None

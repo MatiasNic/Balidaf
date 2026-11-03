@@ -11,7 +11,7 @@ from ..excel_io import Linea, texto_celda
 from ..montos import fmt
 from ..schema import CODIGOS, COL, IMPORTES
 from ..validacion import ADVERTENCIA, ERROR, INFO
-from .widgets import (AZUL, FUENTE, NARANJA, ROJO, VERDE, Aviso, Ayuda, FiltroLateral, Tabla, Tarjeta,
+from .widgets import (AZUL, FUENTE, NARANJA, ROJO, VERDE, Aviso, Ayuda, ComboFiltro, Tabla, Tarjeta,
                       fila)
 
 if TYPE_CHECKING:
@@ -34,10 +34,6 @@ def _motivo(r, g: Grupo) -> str:
 # =====================================================================================
 def _texto_ln(n: int) -> str:
     return f"{n:,}".replace(",", ".")
-
-
-def _con_marca(activo: bool, texto: str) -> str:
-    return ("▶ " if activo else "") + texto
 
 
 class TabBalancear(ttk.Frame):
@@ -81,27 +77,20 @@ class TabBalancear(ttk.Frame):
 
         # ---- Paso 2
         ttk.Label(self, text="Paso 2 · Revisá las correcciones propuestas y aplicalas", style="Paso.TLabel").pack(anchor="w")
-        cuerpo = ttk.PanedWindow(self, orient="horizontal")
-        cuerpo.pack(fill="both", expand=True, pady=(4, 0))
-
-        izq = ttk.Frame(cuerpo)
-        ttk.Label(izq, text="Filtrar por", style="Sub.TLabel").pack(anchor="w")
-        self.filtro = FiltroLateral(izq, self._elegir_filtro, ancho=330)
-        self.filtro.pack(fill="both", expand=True)
-        cuerpo.add(izq, weight=0)
-
-        der = ttk.Frame(cuerpo)
-        cuerpo.add(der, weight=1)
+        der = cuerpo = ttk.Frame(self)
+        der.pack(fill="both", expand=True, pady=(4, 0))
         bus = fila(der, pady=(0, 4))
-        ttk.Label(bus, text="Buscar CUIL o clave:").pack(side="left")
+        self.cb_estado = ComboFiltro(bus, "Estado:", 24, lambda v: self._elegir_filtro("estado", v))
+        self.cb_estado.pack(side="left")
+        self.cb_tipo = ComboFiltro(bus, "   Tipo de corrección:", 32, lambda v: self._elegir_filtro("tipo", v))
+        self.cb_tipo.pack(side="left")
+        ttk.Label(bus, text="   Buscar CUIL o clave:").pack(side="left")
         self.var_buscar = tk.StringVar()
-        e = ttk.Entry(bus, textvariable=self.var_buscar, width=18)
+        e = ttk.Entry(bus, textvariable=self.var_buscar, width=16)
         e.pack(side="left", padx=4)
         e.bind("<Return>", lambda ev: self.refrescar_grupos())
         ttk.Button(bus, text="Buscar", command=self.refrescar_grupos).pack(side="left")
         ttk.Button(bus, text="Limpiar", command=lambda: (self.var_buscar.set(""), self.refrescar_grupos())).pack(side="left", padx=4)
-        self.lbl_resumen = ttk.Label(der, text="", style="Sub.TLabel")
-        self.lbl_resumen.pack(anchor="w", pady=(0, 4))
 
         acc = fila(der, pady=(0, 4))
         self.btn_aplicar_sel = ttk.Button(acc, text="✔ Aplicar seleccionadas", command=self.aplicar_sel)
@@ -116,6 +105,8 @@ class TabBalancear(ttk.Frame):
         Ayuda(self.btn_deshacer, "Vuelve los grupos marcados a sus valores originales.")
         self.lbl_sel = ttk.Label(acc, text="", style="Sub.TLabel")
         self.lbl_sel.pack(side="left", padx=10)
+        self.lbl_resumen = ttk.Label(acc, text="", style="Sub.TLabel")
+        self.lbl_resumen.pack(side="right")
 
         pan = ttk.PanedWindow(der, orient="vertical")
         pan.pack(fill="both", expand=True)
@@ -177,8 +168,8 @@ class TabBalancear(ttk.Frame):
             extra = (f" Además hay {r.errores_propuesta} errores para corregir a mano (pestaña «Ver Excel», "
                      "filtro «Con errores»).") if r.errores_propuesta else " Si aplicás todas, quedan 0 errores."
             self.aviso.mostrar(f"El Excel tiene {_texto_ln(r.errores_actuales)} errores. Balidaf propone "
-                               f"{_texto_ln(pend)} correcciones: usá los filtros de la izquierda para revisarlas "
-                               f"por tipo y aplicalas.{extra}", "info")
+                               f"{_texto_ln(pend)} correcciones: revisalas (podés filtrar por tipo y ordenar por "
+                               f"cualquier columna) y aplicalas.{extra}", "info")
         else:
             self.aviso.mostrar(f"Quedan {r.errores_actuales} errores que el balanceo no puede corregir: hay que "
                                "corregirlos en el Excel original (pestaña «Ver Excel», filtro «Con errores»).", "error")
@@ -201,15 +192,11 @@ class TabBalancear(ttk.Frame):
         por_tipo = {t: 0 for t in TIPOS}
         for g in en_estado:
             por_tipo[tipo_correccion(g)] += 1
-        estados = [(PENDIENTE, "Pendientes de aplicar", por_estado[PENDIENTE]),
-                   (APLICADA, "Aplicadas", por_estado[APLICADA]), ("Todas", "Todas", len(grupos))]
-        tipos = [("Todos", "Todos los tipos", len(en_estado))] + [(t, t, por_tipo[t]) for t in TIPOS]
-        self.filtro.cargar([
-            ("estado", "Estado de la corrección",
-             [(v, _con_marca(v == self.f_estado, t), n) for v, t, n in estados]),
-            ("tipo", "Tipo de corrección",
-             [(v, _con_marca(v == self.f_tipo, t), n) for v, t, n in tipos]),
-        ])
+        self.cb_estado.cargar([(PENDIENTE, "Pendientes de aplicar", por_estado[PENDIENTE]),
+                               (APLICADA, "Aplicadas", por_estado[APLICADA]), ("Todas", "Todas", len(grupos))],
+                              self.f_estado)
+        self.cb_tipo.cargar([("Todos", "Todos los tipos", len(en_estado))]
+                            + [(t, t, por_tipo[t]) for t in TIPOS if por_tipo[t] or t == self.f_tipo], self.f_tipo)
 
     def refrescar_grupos(self) -> None:
         r = self.app.resultado
@@ -231,9 +218,8 @@ class TabBalancear(ttk.Frame):
             filas.append((str(i), (g.estado, tipo_correccion(g), cuil, cod, pres, len(g.lineas), fmt(g.subsidio),
                                    fmt(apli_o), fmt(apli_n), fmt(apli_n - apli_o), _motivo(r, g)),
                           (ESTADO_TAG.get(g.estado, ""),)))
-        txt_estado = {PENDIENTE: "pendientes", APLICADA: "aplicadas", "Todas": "(todas)"}[self.f_estado]
-        self.lbl_resumen.config(text=f"Mostrando {_texto_ln(len(filas))} grupos {txt_estado} · "
-                                     f"{_texto_ln(n_lineas)} líneas · diferencia en aplicado: {fmt(dif_total)}")
+        self.lbl_resumen.config(text=f"{_texto_ln(len(filas))} grupos · {_texto_ln(n_lineas)} líneas · "
+                                     f"diferencia en aplicado: {fmt(dif_total)}")
         pend_vista = sum(1 for g in self._grupos_vista if g.estado == PENDIENTE)
         self.btn_aplicar_lista.config(text=f"✔ Aplicar todas las de la lista ({_texto_ln(pend_vista)})")
         self.lbl_sel.config(text="")
@@ -326,26 +312,20 @@ class TabDevolucion(ttk.Frame):
             cont.columnconfigure(i, weight=1)
             self.tarjetas[k] = tj
 
-        cuerpo = ttk.PanedWindow(self, orient="horizontal")
-        cuerpo.pack(fill="both", expand=True)
-        izq = ttk.Frame(cuerpo)
-        ttk.Label(izq, text="Filtrar por", style="Sub.TLabel").pack(anchor="w")
-        self.filtro = FiltroLateral(izq, self._elegir_filtro, ancho=360)
-        self.filtro.pack(fill="both", expand=True)
-        cuerpo.add(izq, weight=0)
-
-        der = ttk.Frame(cuerpo)
-        cuerpo.add(der, weight=1)
+        der = ttk.Frame(self)
+        der.pack(fill="both", expand=True)
         bus = fila(der, pady=(0, 4))
-        ttk.Label(bus, text="Buscar CUIL o clave:").pack(side="left")
+        self.cb_estado = ComboFiltro(bus, "Estado:", 34, lambda v: self._elegir_filtro("estado", v))
+        self.cb_estado.pack(side="left")
+        self.cb_cod = ComboFiltro(bus, "   Error SSS:", 26, lambda v: self._elegir_filtro("cod", v))
+        self.cb_cod.pack(side="left")
+        ttk.Label(bus, text="   Buscar CUIL o clave:").pack(side="left")
         self.var_buscar = tk.StringVar()
-        e = ttk.Entry(bus, textvariable=self.var_buscar, width=18)
+        e = ttk.Entry(bus, textvariable=self.var_buscar, width=16)
         e.pack(side="left", padx=4)
         e.bind("<Return>", lambda ev: self.mostrar_detalle())
         ttk.Button(bus, text="Buscar", command=self.mostrar_detalle).pack(side="left")
         ttk.Button(bus, text="Limpiar", command=lambda: (self.var_buscar.set(""), self.mostrar_detalle())).pack(side="left", padx=4)
-        self.lbl_resumen = ttk.Label(bus, text="", style="Sub.TLabel")
-        self.lbl_resumen.pack(side="left", padx=10)
 
         acc = fila(der, pady=(0, 4))
         self.btn_aplicar_sel = ttk.Button(acc, text="✔ Corregir seleccionadas en el Excel", command=self.aplicar_sel)
@@ -357,6 +337,8 @@ class TabDevolucion(ttk.Frame):
         Ayuda(self.btn_aplicar_lista, "Aplica la corrección a todas las líneas con propuesta que se ven en la lista.")
         self.btn_deshacer = ttk.Button(acc, text="↶ Deshacer seleccionadas", command=self.deshacer_sel)
         self.btn_deshacer.pack(side="left")
+        self.lbl_resumen = ttk.Label(acc, text="", style="Sub.TLabel")
+        self.lbl_resumen.pack(side="right")
 
         pan = ttk.PanedWindow(der, orient="vertical")
         pan.pack(fill="both", expand=True)
@@ -429,14 +411,12 @@ class TabDevolucion(ttk.Frame):
         for l in en_estado:
             for c in l.codigos_sss:
                 cods[c] = cods.get(c, 0) + 1
-        estados = [("Todos", "Todos", len(cr.lineas))] + [(e, e, cr.por_estado.get(e, 0)) for e in ESTADOS
-                                                          if cr.por_estado.get(e, 0)]
-        codigos = [("Todos", "Todos los errores", len(en_estado))] + [
-            (c, f"{c} · {CODIGOS[c].campo.title() if c in CODIGOS else ''}", n) for c, n in sorted(cods.items())]
-        self.filtro.cargar([
-            ("estado", "Estado", [(v, _con_marca(v == self.f_estado, t), n) for v, t, n in estados]),
-            ("cod", "Error informado por la SSS", [(v, _con_marca(v == self.f_cod, t), n) for v, t, n in codigos]),
-        ])
+        self.cb_estado.cargar([("Todos", "Todos", len(cr.lineas))]
+                              + [(e, e, cr.por_estado.get(e, 0)) for e in ESTADOS if cr.por_estado.get(e, 0)],
+                              self.f_estado)
+        self.cb_cod.cargar([("Todos", "Todos los errores", len(en_estado))]
+                           + [(c, f"{c} · {CODIGOS[c].campo.title() if c in CODIGOS else ''}", n)
+                              for c, n in sorted(cods.items())], self.f_cod)
 
     def mostrar_detalle(self) -> None:
         cr = self.cruce
@@ -453,7 +433,7 @@ class TabDevolucion(ttk.Frame):
                            " ".join(l.pendientes)), (tags.get(l.estado, ""),))
                  for i, l in enumerate(self._lineas)]
         n_prop = sum(1 for l in self._lineas if l.estado == PROPUESTA)
-        self.lbl_resumen.config(text=f"Mostrando {_texto_ln(len(filas))} líneas · {_texto_ln(n_prop)} con corrección propuesta")
+        self.lbl_resumen.config(text=f"{_texto_ln(len(filas))} líneas · {_texto_ln(n_prop)} con corrección propuesta")
         self.btn_aplicar_lista.config(text=f"✔ Corregir todas las de la lista ({_texto_ln(n_prop)})")
         self.t_det.cargar(filas)
         self._escribir("Seleccioná una línea para ver la explicación completa del error y de la corrección.")

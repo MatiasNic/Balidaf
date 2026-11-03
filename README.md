@@ -15,12 +15,12 @@ Excel (Presmed) ──► Balidaf ──► Excel balanceado (limpio) ──► 
 **Pestaña «1 · Balancear»**
 
 1. **Paso 1:** «Examinar…» → elegí el Excel **original** de Presmed → **«Analizar»**.
-   Un panel azul muestra el avance: *Leer el Excel › Revisar reglas › Calcular la corrección › Validar*.
+   La barra de estado (fija, debajo del título) muestra el avance: *Leer el Excel › Revisar reglas › Calcular la corrección › Validar*.
 2. **Paso 2:** aparece la lista de **correcciones propuestas** (una fila por grupo). **Todavía no se aplicó nada.**
-   - A la izquierda, **«Filtrar por»**: estado (pendientes / aplicadas) y **tipo de corrección**, cada uno con su
-     cantidad: *Aplicado mayor al subsidio*, *Aplicado menor al subsidio*, *Fondos propios / reparto*,
-     *Ajuste de centavos*, *Reduce retenciones*, *No se puede balancear*.
-   - Buscador por **CUIL o clave**, y un resumen con la cantidad de grupos, líneas y la diferencia total en aplicado.
+   - Arriba de la tabla: **Estado** (pendientes / aplicadas) y **Tipo de corrección**, cada uno con su cantidad
+     (*Aplicado mayor al subsidio*, *Aplicado menor al subsidio*, *Fondos propios / reparto*, *Ajuste de centavos*,
+     *Reduce retenciones*, *No se puede balancear*), y buscador por **CUIL o clave**.
+   - Clic en el encabezado de cualquier columna para **ordenar** (▲ / ▼).
    - Al hacer clic en un grupo, abajo se ve cada línea con el **original → corregido**.
    - **«Aplicar todas las de la lista»** (respeta el filtro: por ejemplo, aplicar sólo los ajustes de centavos),
      **«Aplicar seleccionadas»** (Ctrl / Shift) o **«Deshacer seleccionadas»**.
@@ -31,8 +31,7 @@ Excel (Presmed) ──► Balidaf ──► Excel balanceado (limpio) ──► 
 
 1. Analizá el Excel original en «1 · Balancear».
 2. **«Cargar TXT de errores (_ERR)»** (y, si querés, el `_OK`).
-3. A la izquierda se filtra por **estado** y por **error informado por la SSS** (con cantidades); hay buscador por
-   CUIL o clave. Para cada línea rechazada se ve el error, el **estado** y la **corrección propuesta
+3. Arriba de la tabla se filtra por **estado** y por **error SSS** (con cantidades); hay buscador por CUIL o clave. Para cada línea rechazada se ve el error, el **estado** y la **corrección propuesta
    (original → corregido)**; abajo, la explicación completa de la línea seleccionada. Estados:
    - *Corrección propuesta (sin aplicar)*: Balidaf sabe corregirla; vos decidís.
    - *Corrección aplicada*: ya la aplicaste.
