@@ -25,3 +25,10 @@ balidaf_errores.log
 !.vscode/tasks.json
 .DS_Store
 Thumbs.db
+
+# Datos reales (contienen CUIL/CBU): nunca subirlos
+*.txt
+!requirements*.txt
+*.xlsx
+*.xlsm
+*.csv

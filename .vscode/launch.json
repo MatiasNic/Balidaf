@@ -15,7 +15,9 @@
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/main.py",
-      "args": ["data/ejemplo.xlsx"],
+      "args": [
+        "data/ejemplo.xlsx"
+      ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "preLaunchTask": "Generar Excel de ejemplo"
@@ -25,7 +27,23 @@
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/main.py",
-      "args": ["${input:excelPath}"],
+      "args": [
+        "${input:excelPath}"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Balidaf: procesar archivo + devolución SSS (sin GUI)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/main.py",
+      "args": [
+        "${input:excelPath}",
+        "--err",
+        "${input:errPath}",
+        "--informe"
+      ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal"
     }
@@ -35,6 +53,11 @@
       "id": "excelPath",
       "type": "promptString",
       "description": "Ruta del Excel a procesar"
+    },
+    {
+      "id": "errPath",
+      "type": "promptString",
+      "description": "Ruta del TXT _DR.DEVOLUCION_ERR"
     }
   ]
 }
