@@ -11,8 +11,8 @@ from ..excel_io import Linea, texto_celda
 from ..montos import fmt
 from ..schema import CODIGOS, COL, IMPORTES
 from ..validacion import ADVERTENCIA, ERROR, INFO
-from .widgets import (AZUL, FUENTE, NARANJA, ROJO, VERDE, Aviso, Ayuda, ComboFiltro, Tabla, Tarjeta,
-                      fila)
+from .widgets import (AZUL, FUENTE, NARANJA, ROJO, VERDE, P, Aviso, Ayuda, ComboFiltro, Tabla, Tarjeta,
+                      al_cambiar_tema, fila)
 
 if TYPE_CHECKING:
     from .app import BalidafApp
@@ -133,7 +133,7 @@ class TabBalancear(ttk.Frame):
         f3 = ttk.Frame(self)
         f3.pack(side="bottom", fill="x", pady=(8, 0), before=cuerpo)
         ttk.Label(f3, text="Paso 3 · ", style="Paso.TLabel").pack(side="left")
-        self.btn_guardar = ttk.Button(f3, text="💾 Guardar Excel para Presmed", style="Ok.TButton",
+        self.btn_guardar = ttk.Button(f3, text="Guardar Excel para Presmed", style="Ok.TButton",
                                       command=app.on_guardar)
         self.btn_guardar.pack(side="left")
         Ayuda(self.btn_guardar, "Guarda <archivo>_balidaf.xlsx con las correcciones APLICADAS.\n"
@@ -351,10 +351,11 @@ class TabDevolucion(ttk.Frame):
         pan.add(self.t_det, weight=3)
         caja = ttk.Frame(pan)
         ttk.Label(caja, text="Detalle de la línea seleccionada", style="Paso.TLabel").pack(anchor="w", pady=(4, 2))
-        self.txt = tk.Text(caja, height=6, wrap="word", relief="flat", bg="#f5f7fa", padx=10, pady=6,
-                           font=(FUENTE, 10))
+        self.txt = tk.Text(caja, height=6, wrap="word", relief="flat", padx=10, pady=6, font=(FUENTE, 10),
+                           highlightthickness=0)
         self.txt.tag_configure("b", font=(FUENTE, 10, "bold"))
-        self.txt.tag_configure("rojo", foreground=ROJO)
+        al_cambiar_tema(lambda: (self.txt.config(bg=P["code"], fg=P["texto"]),
+                                 self.txt.tag_configure("rojo", foreground=P["error"])))
         self.txt.pack(fill="both", expand=True)
         self.txt.configure(state="disabled")
         pan.add(caja, weight=1)
@@ -537,9 +538,11 @@ class TabExcel(ttk.Frame):
         self.lbl.pack(side="right")
 
         ley = fila(self, pady=(0, 4))
-        for txt, bg in [("Corrección pendiente", "#e3f2fd"), ("Corregida", "#fff9c4"), ("Retenciones reducidas", "#ede1f7"),
-                        ("Error", "#fde2e1"), ("Advertencia", "#fff1d6")]:
-            tk.Label(ley, text=f"  {txt}  ", bg=bg, font=(FUENTE, 8)).pack(side="left", padx=(0, 6))
+        for txt, clave in [("Corrección pendiente", "acento_suave"), ("Corregida", "mod_suave"),
+                           ("Retenciones reducidas", "ret_suave"), ("Error", "error_suave"), ("Advertencia", "warn_suave")]:
+            lb = tk.Label(ley, text=f"  {txt}  ", font=(FUENTE, 8))
+            lb.pack(side="left", padx=(0, 6))
+            al_cambiar_tema(lambda lb=lb, clave=clave: lb.config(bg=P[clave], fg=P["texto"]))
         ttk.Label(ley, text="Valores actuales (lo que se va a guardar). Colores sólo en pantalla. Doble clic = detalle.",
                   style="Sub.TLabel").pack(side="left", padx=8)
         self.cont = ttk.Frame(self)
@@ -687,17 +690,21 @@ class TabReglas(ttk.Frame):
         super().__init__(master, padding=(14, 10))
         pan = ttk.Frame(self)
         pan.pack(fill="both", expand=True)
-        txt = tk.Text(pan, wrap="word", relief="flat", bg="white", padx=12, pady=8, height=24)
+        txt = tk.Text(pan, wrap="word", relief="flat", padx=12, pady=8, height=24, highlightthickness=0)
         sb = ttk.Scrollbar(pan, command=txt.yview)
         txt.configure(yscrollcommand=sb.set)
         txt.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
-        txt.tag_configure("h1", font=(FUENTE, 15, "bold"), foreground=AZUL, spacing3=6)
-        txt.tag_configure("h2", font=(FUENTE, 12, "bold"), foreground=AZUL, spacing1=12, spacing3=4)
+        txt.tag_configure("h1", font=(FUENTE, 15, "bold"), spacing3=6)
+        txt.tag_configure("h2", font=(FUENTE, 12, "bold"), spacing1=12, spacing3=4)
         txt.tag_configure("p", font=(FUENTE, 10), spacing3=4)
         txt.tag_configure("b", font=(FUENTE, 10, "bold"), spacing1=4)
         txt.tag_configure("li", font=(FUENTE, 10), lmargin1=12, lmargin2=24, spacing3=2)
-        txt.tag_configure("code", font=("Consolas", 10), background="#f5f7fa", lmargin1=12, lmargin2=12,
+        al_cambiar_tema(lambda: (txt.config(bg=P["fondo"], fg=P["texto"]),
+                                 txt.tag_configure("h1", foreground=P["acento"]),
+                                 txt.tag_configure("h2", foreground=P["acento"]),
+                                 txt.tag_configure("code", background=P["code"])))
+        txt.tag_configure("code", font=("Consolas", 10), lmargin1=12, lmargin2=12,
                           spacing1=2, spacing3=6)
         for tag, contenido in REGLAS_TEXTO:
             txt.insert("end", ("•  " if tag == "li" else "") + contenido + "\n", (tag,))
@@ -715,6 +722,7 @@ class DetalleLinea(tk.Toplevel):
         super().__init__(app)
         r = app.resultado
         self.title(f"Fila {ln.fila} · clave {ln.clave} · CUIL {ln.cuil}")
+        self.configure(bg=P["fondo"])
         self.geometry("1020x660")
         self.transient(app)
         cont = ttk.Frame(self, padding=12)
@@ -757,5 +765,5 @@ class DetalleLinea(tk.Toplevel):
             t3.pack(fill="both", expand=True)
             t3.cargar([(str(i), (h.codigo, h.nivel, h.detalle), (NIVEL_TAG.get(h.nivel, ""),)) for i, h in enumerate(hs)])
         else:
-            tk.Label(lf3, text="✔ La línea cumple todas las reglas de la SSS.", fg=VERDE, bg="white").pack(anchor="w")
+            ttk.Label(lf3, text="✔ La línea cumple todas las reglas de la SSS.", foreground=P["ok"]).pack(anchor="w")
         ttk.Button(cont, text="Cerrar", command=self.destroy).pack(anchor="e", pady=(6, 0))

@@ -4,25 +4,69 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
-# Paleta (sólo para la interfaz; el Excel de salida no lleva colores)
-AZUL = "#1f4e79"
-AZUL_CLARO = "#ddebf7"
-CELESTE_CLARO = "#e3f2fd"
-VERDE = "#1e7b34"
-VERDE_CLARO = "#e2f0d9"
-ROJO = "#b00020"
-ROJO_CLARO = "#fde2e1"
-NARANJA = "#b35c00"
-NARANJA_CLARO = "#fff1d6"
-AMARILLO_CLARO = "#fff9c4"
-VIOLETA_CLARO = "#ede1f7"
-GRIS = "#5f6368"
-GRIS_CLARO = "#f3f4f6"
-FONDO = "#ffffff"
+# ----------------------------------------------------------------------------------------------
+# Temas (sólo para la interfaz; el Excel de salida no lleva colores)
+# Los componentes usan CLAVES de color (AZUL, VERDE…) que se resuelven con la paleta activa.
+# ----------------------------------------------------------------------------------------------
 FUENTE = "Segoe UI"
 
+TEMAS: Dict[str, Dict[str, str]] = {
+    "claro": {
+        "fondo": "#ffffff", "superficie": "#f4f5f7", "borde": "#dfe3e8", "texto": "#1f2328", "texto2": "#5f6b7a",
+        "acento": "#2f5d8a", "acento_hover": "#3b6fa1", "acento_txt": "#ffffff", "acento_suave": "#e8eef5",
+        "cab_bg": "#24364b", "cab_fg": "#ffffff", "cab_sub": "#b8c4d2",
+        "ok": "#2e7d4f", "ok_suave": "#e6f2ea", "ok_btn": "#2e7d4f", "ok_btn_hover": "#37905c",
+        "error": "#b3261e", "error_suave": "#fbe9e7", "warn": "#a15c07", "warn_suave": "#fdf1e0",
+        "mod_suave": "#fbf6dc", "ret_suave": "#efe9f6", "gris_suave": "#f1f2f4",
+        "entrada": "#ffffff", "seleccion": "#c9d8ea", "seleccion_fg": "#1f2328", "code": "#f4f6f8",
+        "heading": "#e9edf2", "deshab": "#aab4c0", "tooltip": "#fffef5",
+    },
+    "oscuro": {
+        "fondo": "#1b1f24", "superficie": "#23282e", "borde": "#343b44", "texto": "#e3e6ea", "texto2": "#9aa4b1",
+        "acento": "#6fa3d8", "acento_hover": "#86b4e2", "acento_txt": "#10161d", "acento_suave": "#22344a",
+        "cab_bg": "#14181d", "cab_fg": "#e3e6ea", "cab_sub": "#8b96a3",
+        "ok": "#6cc28f", "ok_suave": "#1f3528", "ok_btn": "#3f8f5f", "ok_btn_hover": "#4aa36e",
+        "error": "#ef8a80", "error_suave": "#3d2321", "warn": "#e0a458", "warn_suave": "#3a2f1d",
+        "mod_suave": "#37331d", "ret_suave": "#2f2a3b", "gris_suave": "#262b31",
+        "entrada": "#2a3037", "seleccion": "#35506e", "seleccion_fg": "#ffffff", "code": "#262b31",
+        "heading": "#2a3037", "deshab": "#55606c", "tooltip": "#2a3037",
+    },
+}
+P: Dict[str, str] = dict(TEMAS["claro"])   # paleta activa
+TEMA_ACTUAL = ["claro"]
 
-def configurar_estilos(root: tk.Tk) -> None:
+# Claves semánticas usadas por las pestañas
+AZUL, VERDE, ROJO, NARANJA, GRIS = "acento", "ok", "error", "warn", "texto2"
+
+_observadores: List[Callable[[], None]] = []
+
+
+def color(clave: str) -> str:
+    """Devuelve el color de la paleta activa (o el valor tal cual si ya es un color)."""
+    return P.get(clave, clave)
+
+
+def al_cambiar_tema(fn: Callable[[], None]) -> None:
+    """Registra una función que se llama (ahora y) cada vez que cambia el tema."""
+    _observadores.append(fn)
+    fn()
+
+
+def aplicar_tema(root: tk.Misc, nombre: str) -> None:
+    P.update(TEMAS[nombre])
+    TEMA_ACTUAL[0] = nombre
+    configurar_estilos(root)
+    vivos = []
+    for fn in _observadores:
+        try:
+            fn()
+            vivos.append(fn)
+        except tk.TclError:
+            pass   # el widget ya no existe
+    _observadores[:] = vivos
+
+
+def configurar_estilos(root: tk.Misc) -> None:
     st = ttk.Style(root)
     try:
         st.theme_use("clam")
@@ -30,82 +74,139 @@ def configurar_estilos(root: tk.Tk) -> None:
         pass
     base = (FUENTE, 10)
     root.option_add("*Font", base)
-    st.configure(".", font=base, background=FONDO)
-    st.configure("TFrame", background=FONDO)
-    st.configure("TLabel", background=FONDO)
-    st.configure("TRadiobutton", background=FONDO)
-    st.configure("TLabelframe", background=FONDO)
-    st.configure("TLabelframe.Label", background=FONDO, foreground=AZUL, font=(FUENTE, 11, "bold"))
-    st.configure("TNotebook", background=GRIS_CLARO, borderwidth=0)
-    st.configure("TNotebook.Tab", padding=(18, 8), font=(FUENTE, 10, "bold"))
-    st.map("TNotebook.Tab", background=[("selected", FONDO)], foreground=[("selected", AZUL)])
-    st.configure("Treeview", rowheight=24, font=(FUENTE, 9))
-    st.configure("Treeview.Heading", font=(FUENTE, 9, "bold"), background=AZUL_CLARO)
-    st.configure("Accent.TButton", font=(FUENTE, 10, "bold"), foreground="white", background=AZUL, padding=(16, 7))
-    st.map("Accent.TButton", background=[("disabled", "#9bb3cc"), ("active", "#2b6aa3")])
-    st.configure("Ok.TButton", font=(FUENTE, 10, "bold"), foreground="white", background=VERDE, padding=(16, 7))
-    st.map("Ok.TButton", background=[("disabled", "#a9c9b1"), ("active", "#26963f")])
-    st.configure("TButton", padding=(10, 5))
-    st.configure("Paso.TLabel", font=(FUENTE, 11, "bold"), foreground=AZUL)
-    st.configure("Sub.TLabel", foreground=GRIS)
-    st.configure("Cab.TFrame", background=AZUL)
-    st.configure("Cab.TLabel", background=AZUL, foreground="white", font=(FUENTE, 14, "bold"))
-    st.configure("CabSub.TLabel", background=AZUL, foreground="#cfe0f1")
-    st.configure("Grande.Horizontal.TProgressbar", troughcolor="#ffffff", background=AZUL, thickness=22)
+    for k, v in (("background", P["entrada"]), ("foreground", P["texto"]),
+                 ("selectBackground", P["seleccion"]), ("selectForeground", P["seleccion_fg"])):
+        root.option_add(f"*TCombobox*Listbox.{k}", v)
+    try:
+        root.configure(bg=P["fondo"])
+    except tk.TclError:
+        pass
+    st.configure(".", font=base, background=P["fondo"], foreground=P["texto"], bordercolor=P["borde"],
+                 lightcolor=P["borde"], darkcolor=P["borde"], troughcolor=P["superficie"],
+                 fieldbackground=P["entrada"], insertcolor=P["texto"], selectbackground=P["seleccion"],
+                 selectforeground=P["seleccion_fg"])
+    for w in ("TFrame", "TLabel", "TRadiobutton", "TLabelframe", "TPanedwindow"):
+        st.configure(w, background=P["fondo"], foreground=P["texto"])
+    st.configure("Sash", background=P["borde"])
+    st.configure("TLabelframe.Label", background=P["fondo"], foreground=P["acento"], font=(FUENTE, 11, "bold"))
+    st.configure("TButton", padding=(10, 5), background=P["superficie"], foreground=P["texto"], bordercolor=P["borde"])
+    st.map("TButton", background=[("disabled", P["superficie"]), ("active", P["acento_suave"])],
+           foreground=[("disabled", P["deshab"])])
+    st.configure("TEntry", fieldbackground=P["entrada"], foreground=P["texto"])
+    st.configure("TCombobox", fieldbackground=P["entrada"], background=P["superficie"], foreground=P["texto"],
+                 arrowcolor=P["texto2"])
+    st.map("TCombobox", fieldbackground=[("readonly", P["entrada"])], foreground=[("readonly", P["texto"])],
+           selectbackground=[("readonly", P["entrada"])], selectforeground=[("readonly", P["texto"])])
+    for sb in ("TScrollbar", "Vertical.TScrollbar", "Horizontal.TScrollbar"):
+        st.configure(sb, background=P["borde"], troughcolor=P["fondo"], arrowcolor=P["texto2"],
+                     bordercolor=P["fondo"], lightcolor=P["borde"], darkcolor=P["borde"], gripcount=0)
+        st.map(sb, background=[("active", P["texto2"])])
+    st.configure("TNotebook", background=P["fondo"], borderwidth=0)
+    st.configure("TNotebook.Tab", padding=(18, 8), font=(FUENTE, 10, "bold"), background=P["superficie"],
+                 foreground=P["texto2"])
+    st.map("TNotebook.Tab", background=[("selected", P["fondo"])], foreground=[("selected", P["acento"])])
+    st.configure("Treeview", rowheight=24, font=(FUENTE, 9), background=P["entrada"], fieldbackground=P["entrada"],
+                 foreground=P["texto"])
+    st.map("Treeview", background=[("selected", P["seleccion"])], foreground=[("selected", P["seleccion_fg"])])
+    st.configure("Treeview.Heading", font=(FUENTE, 9, "bold"), background=P["heading"], foreground=P["texto"])
+    st.map("Treeview.Heading", background=[("active", P["acento_suave"])])
+    st.configure("Accent.TButton", font=(FUENTE, 10, "bold"), foreground=P["acento_txt"], background=P["acento"],
+                 padding=(16, 7))
+    st.map("Accent.TButton", background=[("disabled", P["deshab"]), ("active", P["acento_hover"])],
+           foreground=[("disabled", P["fondo"])])
+    st.configure("Ok.TButton", font=(FUENTE, 10, "bold"), foreground="#ffffff", background=P["ok_btn"],
+                 padding=(16, 7))
+    st.map("Ok.TButton", background=[("disabled", P["deshab"]), ("active", P["ok_btn_hover"])],
+           foreground=[("disabled", P["fondo"])])
+    st.configure("Paso.TLabel", font=(FUENTE, 11, "bold"), foreground=P["acento"], background=P["fondo"])
+    st.configure("Sub.TLabel", foreground=P["texto2"], background=P["fondo"])
+    st.configure("Cab.TFrame", background=P["cab_bg"])
+    st.configure("Cab.TLabel", background=P["cab_bg"], foreground=P["cab_fg"], font=(FUENTE, 14, "bold"))
+    st.configure("CabSub.TLabel", background=P["cab_bg"], foreground=P["cab_sub"])
+    st.configure("Cab.TButton", background=P["cab_bg"], foreground=P["cab_fg"], borderwidth=0, padding=(10, 2),
+                 font=(FUENTE, 14), focusthickness=0, bordercolor=P["cab_bg"], lightcolor=P["cab_bg"],
+                 darkcolor=P["cab_bg"])
+    st.map("Cab.TButton", background=[("active", P["acento"])])
+    st.configure("Grande.Horizontal.TProgressbar", troughcolor=P["entrada"], background=P["acento"], thickness=18,
+                 bordercolor=P["borde"], lightcolor=P["acento"], darkcolor=P["acento"])
 
 
 class Tarjeta(tk.Frame):
     """Indicador grande: número + leyenda."""
 
-    def __init__(self, master, titulo: str, color: str = AZUL, fondo: str = GRIS_CLARO):
-        super().__init__(master, bg=fondo, padx=14, pady=8, highlightthickness=1, highlightbackground="#e0e0e0")
-        self._color = color
-        self.valor = tk.Label(self, text="–", font=(FUENTE, 18, "bold"), fg=color, bg=fondo)
+    def __init__(self, master, titulo: str, color_clave: str = AZUL):
+        super().__init__(master, padx=14, pady=8, highlightthickness=1)
+        self._base = color_clave
+        self._actual = color_clave
+        self.valor = tk.Label(self, text="–", font=(FUENTE, 18, "bold"))
         self.valor.pack(anchor="w")
-        self.titulo = tk.Label(self, text=titulo, font=(FUENTE, 9), fg=GRIS, bg=fondo, justify="left")
+        self.titulo = tk.Label(self, text=titulo, font=(FUENTE, 9), justify="left")
         self.titulo.pack(anchor="w")
+        al_cambiar_tema(self._tema)
 
-    def set(self, valor, color: Optional[str] = None) -> None:
+    def _tema(self) -> None:
+        self.config(bg=P["superficie"], highlightbackground=P["borde"])
+        self.valor.config(bg=P["superficie"], fg=color(self._actual))
+        self.titulo.config(bg=P["superficie"], fg=P["texto2"])
+
+    def set(self, valor, color_clave: Optional[str] = None) -> None:
+        self._actual = color_clave or self._base
         self.valor.config(text=f"{valor:,}".replace(",", ".") if isinstance(valor, int) else str(valor),
-                          fg=color or self._color)
+                          fg=color(self._actual))
 
 
 class Aviso(tk.Label):
     """Cartel de estado con la próxima acción a realizar."""
 
-    ESTILOS = {"info": (AZUL, CELESTE_CLARO), "ok": (VERDE, VERDE_CLARO), "error": (ROJO, ROJO_CLARO),
-               "warn": (NARANJA, NARANJA_CLARO), "neutro": (GRIS, GRIS_CLARO)}
+    ESTILOS = {"info": ("acento", "acento_suave"), "ok": ("ok", "ok_suave"), "error": ("error", "error_suave"),
+               "warn": ("warn", "warn_suave"), "neutro": ("texto2", "gris_suave")}
 
     def __init__(self, master, texto: str = ""):
         super().__init__(master, text=texto, font=(FUENTE, 11, "bold"), anchor="w", justify="left",
                          padx=14, pady=10, wraplength=1150)
-        self.mostrar(texto, "neutro")
+        self._tipo = "neutro"
+        al_cambiar_tema(self._tema)
+
+    def _tema(self) -> None:
+        fg, bg = self.ESTILOS[self._tipo]
+        self.config(fg=P[fg], bg=P[bg])
 
     def mostrar(self, texto: str, tipo: str = "info") -> None:
-        fg, bg = self.ESTILOS[tipo]
-        self.config(text=texto, fg=fg, bg=bg)
+        self._tipo = tipo
+        self.config(text=texto)
+        self._tema()
 
 
 class PanelProgreso(tk.Frame):
     """Barra de estado FIJA dentro de la ventana: qué está haciendo, pasos, barra y porcentaje."""
 
     def __init__(self, master):
-        super().__init__(master, bg=CELESTE_CLARO, padx=14, pady=6, highlightthickness=1,
-                         highlightbackground="#90caf9")
-        self.titulo = tk.Label(self, text="", font=(FUENTE, 10, "bold"), fg=AZUL, bg=CELESTE_CLARO,
-                               width=34, anchor="w")
+        super().__init__(master, padx=14, pady=6, highlightthickness=1)
+        self.titulo = tk.Label(self, text="", font=(FUENTE, 10, "bold"), width=34, anchor="w")
         self.titulo.grid(row=0, column=0, sticky="w")
         self.pb = ttk.Progressbar(self, mode="determinate", style="Grande.Horizontal.TProgressbar", maximum=100)
         self.pb.grid(row=0, column=1, sticky="ew", padx=(8, 8))
-        self.pct = tk.Label(self, text="", font=(FUENTE, 10, "bold"), fg=AZUL, bg=CELESTE_CLARO, width=6, anchor="e")
+        self.pct = tk.Label(self, text="", font=(FUENTE, 10, "bold"), width=6, anchor="e")
         self.pct.grid(row=0, column=2)
-        self.pasos = tk.Label(self, text="", font=(FUENTE, 9), fg=GRIS, bg=CELESTE_CLARO, anchor="w")
+        self.pasos = tk.Label(self, text="", font=(FUENTE, 9), anchor="w")
         self.pasos.grid(row=1, column=0, columnspan=3, sticky="w", pady=(3, 0))
         self.columnconfigure(1, weight=1)
         self._pasos: List[Tuple[str, str]] = []
         self._estado: Dict[str, str] = {}
         self._indeterminado = False
+        self._color_titulo = "texto2"
+        al_cambiar_tema(self._tema)
         self.reposo("Listo. Elegí un Excel y presioná «Analizar».")
+
+    def _tema(self) -> None:
+        self.config(bg=P["acento_suave"], highlightbackground=P["borde"])
+        self.titulo.config(bg=P["acento_suave"], fg=P[self._color_titulo])
+        self.pct.config(bg=P["acento_suave"], fg=P["acento"])
+        self.pasos.config(bg=P["acento_suave"], fg=P["texto2"])
+
+    def _titulo(self, texto: str, clave: str) -> None:
+        self._color_titulo = clave
+        self.titulo.config(text=texto, fg=P[clave])
 
     def _pintar_pasos(self, detalle: str = "") -> None:
         marcas = {"ok": "✔", "actual": "▶", "": "○"}
@@ -114,13 +215,13 @@ class PanelProgreso(tk.Frame):
 
     def reposo(self, texto: str) -> None:
         self._set_valor(0, mostrar_pct=False)
-        self.titulo.config(text=f"●  {texto}", fg=GRIS)
+        self._titulo(f"●  {texto}", "texto2")
         self.pasos.config(text="")
 
     def iniciar(self, titulo: str, pasos: Sequence[Tuple[str, str]]) -> None:
         self._pasos = list(pasos)
         self._estado = {}
-        self.titulo.config(text=f"⏳  {titulo}", fg=AZUL)
+        self._titulo(f"⏳  {titulo}", "acento")
         self._set_valor(0)
         self._pintar_pasos()
 
@@ -155,7 +256,7 @@ class PanelProgreso(tk.Frame):
         for pid, _ in self._pasos:
             self._estado[pid] = "ok"
         self._set_valor(100)
-        self.titulo.config(text=("✔  " if ok else "✖  ") + texto, fg=VERDE if ok else ROJO)
+        self._titulo(("✔  " if ok else "✖  ") + texto, "ok" if ok else "error")
         self._pintar_pasos()
 
 
@@ -204,14 +305,17 @@ class Tabla(ttk.Frame):
         xs.grid(row=1, column=0, sticky="ew")
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
-        for tag, bg in [("error", ROJO_CLARO), ("warn", NARANJA_CLARO), ("mod", AMARILLO_CLARO),
-                        ("ok", VERDE_CLARO), ("info", AZUL_CLARO), ("prop", CELESTE_CLARO),
-                        ("ret", VIOLETA_CLARO), ("gris", GRIS_CLARO)]:
-            self.tree.tag_configure(tag, background=bg)
+        al_cambiar_tema(self._tema)
         self._job = None
         self._orden_desc: Dict[str, bool] = {}
         if on_doble_click:
             self.tree.bind("<Double-1>", lambda e: self._doble(on_doble_click))
+
+    def _tema(self) -> None:
+        for tag, clave in [("error", "error_suave"), ("warn", "warn_suave"), ("mod", "mod_suave"),
+                           ("ok", "ok_suave"), ("info", "acento_suave"), ("prop", "acento_suave"),
+                           ("ret", "ret_suave"), ("gris", "gris_suave")]:
+            self.tree.tag_configure(tag, background=P[clave], foreground=P["texto"])
 
     def _doble(self, fn):
         sel = self.tree.selection()
@@ -295,7 +399,7 @@ class Ayuda:
         self.win = tk.Toplevel(self.widget)
         self.win.wm_overrideredirect(True)
         self.win.wm_geometry(f"+{x}+{y}")
-        tk.Label(self.win, text=self.texto, justify="left", bg="#fffde7", fg="#333", relief="solid", bd=1,
+        tk.Label(self.win, text=self.texto, justify="left", bg=P["tooltip"], fg=P["texto"], relief="solid", bd=1,
                  font=(FUENTE, 9), padx=8, pady=5, wraplength=380).pack()
 
     def _ocultar(self, _e=None):

@@ -16,7 +16,8 @@ from ..paths import ERROR_LOG_NAME, resource_path, write_error_log
 from ..proceso import PASOS, Resultado, analizar, guardar, ruta_salida
 from ..sss_txt import ArchivoTxt, leer_txt
 from .tabs import DetalleLinea, TabBalancear, TabDevolucion, TabExcel, TabReglas
-from .widgets import PanelProgreso, configurar_estilos
+from .widgets import TEMA_ACTUAL, PanelProgreso, aplicar_tema, configurar_estilos
+from .preferencias import guardar_preferencia, leer_preferencia
 
 
 def _dpi_windows() -> None:
@@ -40,7 +41,6 @@ class BalidafApp(tk.Tk):
         except Exception:
             pass
         configurar_estilos(self)
-        self.configure(bg="white")
 
         self.resultado: Optional[Resultado] = None
         self.cruce: Optional[ResultadoCruce] = None
@@ -54,6 +54,10 @@ class BalidafApp(tk.Tk):
         ttk.Label(cab, text="Balidaf", style="Cab.TLabel").pack(side="left")
         ttk.Label(cab, text="   Balanceo de subsidios · Rendición Mecanismo Integración (SSSalud)",
                   style="CabSub.TLabel").pack(side="left")
+        self.btn_tema = ttk.Button(cab, text="☾", width=3, style="Cab.TButton", command=self.cambiar_tema)
+        self.btn_tema.pack(side="right")
+        from .widgets import Ayuda
+        Ayuda(self.btn_tema, "Cambiar entre modo claro y modo oscuro.")
 
         self.progreso = PanelProgreso(self)      # barra de estado fija, siempre visible
         self.progreso.pack(fill="x", padx=10, pady=(8, 0))
@@ -69,7 +73,20 @@ class BalidafApp(tk.Tk):
         self.nb.add(self.tab_reglas, text="  Reglas de balanceo  ")
         self.nb.bind("<<NotebookTabChanged>>", self._cambio_pestana)
         self._habilitar()
+        self._aplicar_tema(leer_preferencia("tema", "claro"))
         self.after(100, self._procesar_cola)
+
+    # ------------------------------------------------------------------ tema claro / oscuro
+    def _aplicar_tema(self, nombre: str) -> None:
+        if nombre not in ("claro", "oscuro"):
+            nombre = "claro"
+        aplicar_tema(self, nombre)
+        self.btn_tema.config(text="☀" if nombre == "oscuro" else "☾")
+
+    def cambiar_tema(self) -> None:
+        nuevo = "claro" if TEMA_ACTUAL[0] == "oscuro" else "oscuro"
+        self._aplicar_tema(nuevo)
+        guardar_preferencia("tema", nuevo)
 
     # ------------------------------------------------------------------ trabajo en segundo plano
     def _procesar_cola(self) -> None:

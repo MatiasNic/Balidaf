@@ -45,6 +45,8 @@ Excel (Presmed) ──► Balidaf ──► Excel balanceado (limpio) ──► 
 **Pestaña «Ver Excel»:** el Excel con los valores actuales («Importes y datos clave» o «Todas las columnas»); colores sólo en pantalla
 (pendiente / corregida / retenciones reducidas / error). Doble clic: detalle de la línea y su grupo.
 
+**Modo claro / oscuro:** ícono ☾ / ☀ arriba a la derecha (se recuerda para la próxima vez).
+
 **Pestaña «Reglas de balanceo»:** la lógica completa con los nombres de las columnas y todos los controles de la SSS.
 
 ## Qué hace el balanceo
@@ -80,7 +82,10 @@ Balidaf/
 │   ├── proceso.py          ← orquesta todo (GUI y consola)
 │   ├── informe.py          ← informe de detalle (Excel aparte)
 │   └── gui/                ← interfaz: app.py (ventana), tabs.py (pestañas), widgets.py
-├── docs/ANALISIS_202606.md ← análisis de la rendición 202606 que originó esta versión
+├── docs/
+│   ├── ANALISIS_202606.md      ← análisis de la rendición 202606 que originó esta versión
+│   ├── LOGICA_DEL_PROGRAMA.md  ← funcionamiento y reglas de balanceo
+│   └── BRIEF_DISENO.md         ← brief para el rediseño visual
 ├── tests/                  ← pruebas automáticas (pytest)
 ├── scripts/
 │   ├── generar_ejemplo.py  ← Excel de prueba con datos FICTICIOS
