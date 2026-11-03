@@ -246,3 +246,81 @@ def fila(master, **pack) -> ttk.Frame:
     f = ttk.Frame(master)
     f.pack(fill="x", **opciones)
     return f
+
+
+class Ayuda:
+    """Texto de ayuda que aparece al dejar el mouse sobre un control."""
+
+    def __init__(self, widget, texto: str):
+        self.widget, self.texto, self.win, self._job = widget, texto, None, None
+        widget.bind("<Enter>", self._programar, add="+")
+        widget.bind("<Leave>", self._ocultar, add="+")
+        widget.bind("<ButtonPress>", self._ocultar, add="+")
+
+    def _programar(self, _e=None):
+        self._job = self.widget.after(500, self._mostrar)
+
+    def _mostrar(self):
+        if self.win:
+            return
+        x = self.widget.winfo_rootx() + 10
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
+        self.win = tk.Toplevel(self.widget)
+        self.win.wm_overrideredirect(True)
+        self.win.wm_geometry(f"+{x}+{y}")
+        tk.Label(self.win, text=self.texto, justify="left", bg="#fffde7", fg="#333", relief="solid", bd=1,
+                 font=(FUENTE, 9), padx=8, pady=5, wraplength=380).pack()
+
+    def _ocultar(self, _e=None):
+        if self._job:
+            self.widget.after_cancel(self._job)
+            self._job = None
+        if self.win:
+            self.win.destroy()
+            self.win = None
+
+
+class FiltroLateral(ttk.Frame):
+    """Panel izquierdo con secciones de filtros y cantidades (p. ej. Estado / Tipo de corrección)."""
+
+    def __init__(self, master, al_elegir: Callable[[str, str], None], ancho: int = 270):
+        super().__init__(master)
+        st = ttk.Style(self)
+        st.configure("Filtro.Treeview", rowheight=26, font=(FUENTE, 10))
+        self.tree = ttk.Treeview(self, show="tree", selectmode="browse", style="Filtro.Treeview")
+        self.tree.column("#0", width=ancho, minwidth=ancho, stretch=True)
+        self.configure(width=ancho)
+        self.tree.tag_configure("seccion", font=(FUENTE, 10, "bold"), foreground=AZUL)
+        self.tree.tag_configure("cero", foreground="#9aa0a6")
+        self.tree.pack(fill="both", expand=True)
+        self._cb = al_elegir
+        self._cargando = False
+        self.tree.bind("<<TreeviewSelect>>", self._elegir)
+
+    def cargar(self, secciones: Sequence[Tuple[str, str, Sequence[Tuple[str, str, int]]]],
+               seleccion: Optional[str] = None) -> None:
+        """secciones: (id_seccion, título, [(valor, texto, cantidad)])."""
+        self._cargando = True
+        self.tree.delete(*self.tree.get_children())
+        for sid, titulo, items in secciones:
+            self.tree.insert("", "end", iid=sid, text=titulo, open=True, tags=("seccion",))
+            for valor, texto, n in items:
+                cant = f"{n:,}".replace(",", ".")
+                self.tree.insert(sid, "end", iid=f"{sid}|{valor}", text=f"   {texto}   ({cant})",
+                                 tags=("cero",) if n == 0 else ())
+        if seleccion and self.tree.exists(seleccion):
+            self.tree.selection_set(seleccion)
+            self.tree.see(seleccion)
+        self._cargando = False
+
+    def _elegir(self, _e=None):
+        if self._cargando:
+            return
+        sel = self.tree.selection()
+        if sel and "|" in sel[0]:
+            sid, valor = sel[0].split("|", 1)
+            self._cb(sid, valor)
+
+    def seleccionado(self) -> Optional[str]:
+        sel = self.tree.selection()
+        return sel[0] if sel else None

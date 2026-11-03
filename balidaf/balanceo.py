@@ -175,3 +175,38 @@ def deshacer(grupos: Iterable[Grupo]) -> int:
             g.estado = PENDIENTE
             n += 1
     return n
+
+
+# ----------------------------------------------------------------------------------------------
+# Tipo de corrección (para organizar la lista en pantalla)
+# ----------------------------------------------------------------------------------------------
+TIPO_NO_BALANCEA = "No se puede balancear"
+TIPO_RETENCIONES = "Reduce retenciones"
+TIPO_DE_MAS = "Aplicado mayor al subsidio"
+TIPO_DE_MENOS = "Aplicado menor al subsidio"
+TIPO_CENTAVOS = "Ajuste de centavos"
+TIPO_FONDOS = "Fondos propios / reparto"
+TIPOS = [TIPO_DE_MAS, TIPO_DE_MENOS, TIPO_FONDOS, TIPO_CENTAVOS, TIPO_RETENCIONES, TIPO_NO_BALANCEA]
+
+
+def diferencia_aplicado(g: Grupo) -> int:
+    """Σ aplicado corregido − Σ aplicado original (centavos)."""
+    return sum(ln.propuesta.get("apli", ln.original["apli"]) - ln.original["apli"] for ln in g.lineas)
+
+
+def tipo_correccion(g: Grupo) -> str:
+    """Clasifica la corrección del grupo para poder filtrarla en pantalla."""
+    if g.sobrante > 0:
+        return TIPO_NO_BALANCEA
+    if g.retenciones_reducidas:
+        return TIPO_RETENCIONES
+    max_cambio = max((abs(ln.propuesta.get(k, ln.original[k]) - ln.original[k])
+                      for ln in g.lineas for k in ("apli", "transferido", "fdo_ppio")), default=0)
+    if max_cambio <= 100:
+        return TIPO_CENTAVOS
+    aplicado_original = sum(ln.original["apli"] for ln in g.lineas)
+    if aplicado_original > g.a_aplicar:
+        return TIPO_DE_MAS
+    if aplicado_original < g.a_aplicar:
+        return TIPO_DE_MENOS
+    return TIPO_FONDOS

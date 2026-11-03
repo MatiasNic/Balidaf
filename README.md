@@ -17,9 +17,13 @@ Excel (Presmed) ──► Balidaf ──► Excel balanceado (limpio) ──► 
 1. **Paso 1:** «Examinar…» → elegí el Excel **original** de Presmed → **«Analizar»**.
    Un panel azul muestra el avance: *Leer el Excel › Revisar reglas › Calcular la corrección › Validar*.
 2. **Paso 2:** aparece la lista de **correcciones propuestas** (una fila por grupo). **Todavía no se aplicó nada.**
-   Al hacer clic en un grupo, abajo se ve cada línea con el **original → corregido**.
-   - **«Aplicar todas»** o seleccioná algunas (Ctrl / Shift) y **«Aplicar seleccionadas»**.
-   - **«Deshacer seleccionadas»** vuelve esos grupos a los valores originales.
+   - A la izquierda, **«Filtrar por»**: estado (pendientes / aplicadas) y **tipo de corrección**, cada uno con su
+     cantidad: *Aplicado mayor al subsidio*, *Aplicado menor al subsidio*, *Fondos propios / reparto*,
+     *Ajuste de centavos*, *Reduce retenciones*, *No se puede balancear*.
+   - Buscador por **CUIL o clave**, y un resumen con la cantidad de grupos, líneas y la diferencia total en aplicado.
+   - Al hacer clic en un grupo, abajo se ve cada línea con el **original → corregido**.
+   - **«Aplicar todas las de la lista»** (respeta el filtro: por ejemplo, aplicar sólo los ajustes de centavos),
+     **«Aplicar seleccionadas»** (Ctrl / Shift) o **«Deshacer seleccionadas»**.
 3. **Paso 3:** **«Guardar Excel para Presmed»** → genera `<archivo>_balidaf.xlsx` con lo aplicado
    (sin colores ni hojas nuevas). El original no se toca.
 
@@ -27,8 +31,9 @@ Excel (Presmed) ──► Balidaf ──► Excel balanceado (limpio) ──► 
 
 1. Analizá el Excel original en «1 · Balancear».
 2. **«Cargar TXT de errores (_ERR)»** (y, si querés, el `_OK`).
-3. Para cada línea rechazada se ve: el error de la SSS y su descripción, el **estado** y la
-   **corrección propuesta (original → corregido)**. Estados:
+3. A la izquierda se filtra por **estado** y por **error informado por la SSS** (con cantidades); hay buscador por
+   CUIL o clave. Para cada línea rechazada se ve el error, el **estado** y la **corrección propuesta
+   (original → corregido)**; abajo, la explicación completa de la línea seleccionada. Estados:
    - *Corrección propuesta (sin aplicar)*: Balidaf sabe corregirla; vos decidís.
    - *Corrección aplicada*: ya la aplicaste.
    - *Requiere corrección manual*: hay que corregir un dato en el Excel (columna «Qué falta»).
@@ -38,7 +43,7 @@ Excel (Presmed) ──► Balidaf ──► Excel balanceado (limpio) ──► 
 > Si corregís **sólo** los grupos rechazados, pueden quedar diferencias de centavos en líneas que la SSS
 > aceptó (las tolera). Aplicando **todas** las correcciones el Excel queda exacto.
 
-**Pestaña «Ver Excel»:** el Excel completo con los valores actuales; colores sólo en pantalla
+**Pestaña «Ver Excel»:** el Excel con los valores actuales («Importes y datos clave» o «Todas las columnas»); colores sólo en pantalla
 (pendiente / corregida / retenciones reducidas / error). Doble clic: detalle de la línea y su grupo.
 
 **Pestaña «Reglas de balanceo»:** la lógica completa con los nombres de las columnas y todos los controles de la SSS.

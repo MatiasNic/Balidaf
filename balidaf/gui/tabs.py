@@ -4,14 +4,15 @@ import tkinter as tk
 from tkinter import ttk
 from typing import TYPE_CHECKING, Dict, List, Optional
 
-from ..balanceo import APLICADA, PENDIENTE, SIN_CAMBIOS, Grupo
+from ..balanceo import APLICADA, PENDIENTE, SIN_CAMBIOS, TIPOS, Grupo, tipo_correccion
 from ..devolucion import (APLICADA_TXT, ESTADOS, NO_ENCONTRADO, PENDIENTE_MANUAL,
                           PENDIENTE_SISTEMAS, PROPUESTA, YA_CUMPLE, ResultadoCruce)
 from ..excel_io import Linea, texto_celda
 from ..montos import fmt
 from ..schema import CODIGOS, COL, IMPORTES
 from ..validacion import ADVERTENCIA, ERROR, INFO
-from .widgets import AZUL, FUENTE, NARANJA, ROJO, VERDE, Aviso, Tabla, Tarjeta, fila
+from .widgets import (AZUL, FUENTE, NARANJA, ROJO, VERDE, Aviso, Ayuda, FiltroLateral, Tabla, Tarjeta,
+                      fila)
 
 if TYPE_CHECKING:
     from .app import BalidafApp
@@ -31,12 +32,22 @@ def _motivo(r, g: Grupo) -> str:
 
 
 # =====================================================================================
+def _texto_ln(n: int) -> str:
+    return f"{n:,}".replace(",", ".")
+
+
+def _con_marca(activo: bool, texto: str) -> str:
+    return ("▶ " if activo else "") + texto
+
+
 class TabBalancear(ttk.Frame):
-    """Paso 1: elegir Excel → Analizar → revisar la corrección → aplicar → guardar."""
+    """Paso 1: elegir Excel → Analizar → revisar la corrección (filtrada por tipo) → aplicar → guardar."""
 
     def __init__(self, master, app: "BalidafApp"):
         super().__init__(master, padding=(14, 10))
         self.app = app
+        self.f_estado = PENDIENTE
+        self.f_tipo = "Todos"
 
         # ---- Paso 1
         ttk.Label(self, text="Paso 1 · Elegí el Excel ORIGINAL de Presmed y presioná «Analizar»",
@@ -44,9 +55,13 @@ class TabBalancear(ttk.Frame):
         f = fila(self, pady=(4, 8))
         self.var_ruta = tk.StringVar()
         ttk.Entry(f, textvariable=self.var_ruta).pack(side="left", fill="x", expand=True)
-        ttk.Button(f, text="Examinar…", command=app.on_examinar).pack(side="left", padx=6)
+        b = ttk.Button(f, text="Examinar…", command=app.on_examinar)
+        b.pack(side="left", padx=6)
+        Ayuda(b, "Elegí el Excel tal como lo da Presmed, SIN balancear.")
         self.btn_analizar = ttk.Button(f, text="Analizar", style="Accent.TButton", command=app.on_analizar)
         self.btn_analizar.pack(side="left")
+        Ayuda(self.btn_analizar, "Lee el Excel, revisa las reglas de la SSS y calcula la corrección.\n"
+                                 "No modifica nada: sólo propone.")
 
         self.aviso = Aviso(self, "Todavía no se analizó ningún Excel.")
         self.aviso.pack(fill="x", pady=(0, 8))
@@ -65,53 +80,76 @@ class TabBalancear(ttk.Frame):
             self.tarjetas[k] = tj
 
         # ---- Paso 2
-        cab = fila(self, pady=(2, 4))
-        ttk.Label(cab, text="Paso 2 · Revisá las correcciones propuestas y aplicalas", style="Paso.TLabel").pack(side="left")
-        ttk.Label(cab, text="   Mostrar:").pack(side="left")
-        self.var_filtro = tk.StringVar(value="Pendientes")
-        cb = ttk.Combobox(cab, textvariable=self.var_filtro, state="readonly", width=12,
-                          values=["Pendientes", "Aplicadas", "Todas"])
-        cb.pack(side="left", padx=4)
-        cb.bind("<<ComboboxSelected>>", lambda e: self.refrescar_grupos())
-        self.lbl_cant = ttk.Label(cab, text="", style="Sub.TLabel")
-        self.lbl_cant.pack(side="left", padx=8)
+        ttk.Label(self, text="Paso 2 · Revisá las correcciones propuestas y aplicalas", style="Paso.TLabel").pack(anchor="w")
+        cuerpo = ttk.PanedWindow(self, orient="horizontal")
+        cuerpo.pack(fill="both", expand=True, pady=(4, 0))
 
-        acc = fila(self, pady=(0, 4))
+        izq = ttk.Frame(cuerpo)
+        ttk.Label(izq, text="Filtrar por", style="Sub.TLabel").pack(anchor="w")
+        self.filtro = FiltroLateral(izq, self._elegir_filtro, ancho=330)
+        self.filtro.pack(fill="both", expand=True)
+        cuerpo.add(izq, weight=0)
+
+        der = ttk.Frame(cuerpo)
+        cuerpo.add(der, weight=1)
+        bus = fila(der, pady=(0, 4))
+        ttk.Label(bus, text="Buscar CUIL o clave:").pack(side="left")
+        self.var_buscar = tk.StringVar()
+        e = ttk.Entry(bus, textvariable=self.var_buscar, width=18)
+        e.pack(side="left", padx=4)
+        e.bind("<Return>", lambda ev: self.refrescar_grupos())
+        ttk.Button(bus, text="Buscar", command=self.refrescar_grupos).pack(side="left")
+        ttk.Button(bus, text="Limpiar", command=lambda: (self.var_buscar.set(""), self.refrescar_grupos())).pack(side="left", padx=4)
+        self.lbl_resumen = ttk.Label(der, text="", style="Sub.TLabel")
+        self.lbl_resumen.pack(anchor="w", pady=(0, 4))
+
+        acc = fila(der, pady=(0, 4))
         self.btn_aplicar_sel = ttk.Button(acc, text="✔ Aplicar seleccionadas", command=self.aplicar_sel)
         self.btn_aplicar_sel.pack(side="left")
-        self.btn_aplicar_todo = ttk.Button(acc, text="✔ Aplicar todas", command=self.aplicar_todo)
-        self.btn_aplicar_todo.pack(side="left", padx=6)
+        Ayuda(self.btn_aplicar_sel, "Aplica la corrección sólo a los grupos marcados (Ctrl o Shift para marcar varios).")
+        self.btn_aplicar_lista = ttk.Button(acc, text="✔ Aplicar todas las de la lista", command=self.aplicar_lista)
+        self.btn_aplicar_lista.pack(side="left", padx=6)
+        Ayuda(self.btn_aplicar_lista, "Aplica todas las correcciones PENDIENTES que se ven ahora en la lista\n"
+                                      "(respeta el filtro y la búsqueda).")
         self.btn_deshacer = ttk.Button(acc, text="↶ Deshacer seleccionadas", command=self.deshacer_sel)
         self.btn_deshacer.pack(side="left")
-        ttk.Label(acc, text="Seleccioná varias con Ctrl o Shift. Cada fila es un grupo (CUIL + períodos + práctica).",
-                  style="Sub.TLabel").pack(side="left", padx=10)
+        Ayuda(self.btn_deshacer, "Vuelve los grupos marcados a sus valores originales.")
+        self.lbl_sel = ttk.Label(acc, text="", style="Sub.TLabel")
+        self.lbl_sel.pack(side="left", padx=10)
 
-        pan = ttk.PanedWindow(self, orient="vertical")
+        pan = ttk.PanedWindow(der, orient="vertical")
         pan.pack(fill="both", expand=True)
-        self.t_grupos = Tabla(pan, [("estado", "Estado", 90), ("cuil", "CUIL", 105), ("cod", "Práctica", 65),
-                                    ("pres", "Prestación", 80), ("n", "Líneas", 55), ("sub", "Subsidio", 110),
-                                    ("apli_o", "Aplicado original", 130), ("apli_n", "Aplicado corregido", 130),
-                                    ("motivo", "Errores SSS", 90), ("nota", "Nota", 260)],
-                              altura=8, seleccion="extended")
+        self.t_grupos = Tabla(pan, [("estado", "Estado", 80), ("tipo", "Tipo de corrección", 210),
+                                    ("cuil", "CUIL", 100), ("cod", "Práctica", 62), ("pres", "Prestación", 76),
+                                    ("n", "Líneas", 52), ("sub", "Subsidio", 105), ("apli_o", "Aplicado original", 120),
+                                    ("apli_n", "Aplicado corregido", 125), ("dif", "Diferencia", 105),
+                                    ("motivo", "Errores SSS", 85)], altura=8, seleccion="extended")
         self.t_grupos.tree.bind("<<TreeviewSelect>>", lambda e: self.mostrar_detalle())
         pan.add(self.t_grupos, weight=3)
-        lf = ttk.LabelFrame(pan, text="Detalle del grupo seleccionado (original → corregido)", padding=4)
-        self.t_det = Tabla(lf, [("fila", "Fila", 55), ("clave", "Clave", 105), ("sol", "Solicitado", 105),
-                                ("ret", "Retenciones", 170), ("apli", "Aplicado (impor_apli_sss)", 210),
-                                ("tr", "Transferido (importe_transferido)", 230),
-                                ("fdo", "Fondos propios (fdo_ppio_ingre_cta_disca)", 250)], altura=4,
+        det = ttk.Frame(pan)
+        self.lbl_det = ttk.Label(det, text="Seleccioná un grupo para ver el detalle línea por línea (original → corregido).",
+                                 style="Paso.TLabel")
+        self.lbl_det.pack(anchor="w", pady=(4, 2))
+        self.t_det = Tabla(det, [("fila", "Fila", 55), ("clave", "Clave", 105), ("sol", "Solicitado", 105),
+                                 ("ret", "Retenciones", 170), ("apli", "Aplicado (impor_apli_sss)", 210),
+                                 ("tr", "Transferido (importe_transferido)", 230),
+                                 ("fdo", "Fondos propios (fdo_ppio_ingre_cta_disca)", 250)], altura=4,
                            on_doble_click=lambda iid: app.abrir_detalle(int(iid)))
         self.t_det.pack(fill="both", expand=True)
-        pan.add(lf, weight=2)
+        pan.add(det, weight=2)
 
-        # ---- Paso 3
-        f3 = fila(self, pady=(8, 0))
+        # ---- Paso 3 (siempre visible abajo, aunque la ventana sea chica)
+        f3 = ttk.Frame(self)
+        f3.pack(side="bottom", fill="x", pady=(8, 0), before=cuerpo)
         ttk.Label(f3, text="Paso 3 · ", style="Paso.TLabel").pack(side="left")
         self.btn_guardar = ttk.Button(f3, text="💾 Guardar Excel para Presmed", style="Ok.TButton",
                                       command=app.on_guardar)
         self.btn_guardar.pack(side="left")
+        Ayuda(self.btn_guardar, "Guarda <archivo>_balidaf.xlsx con las correcciones APLICADAS.\n"
+                                "Sin colores ni hojas nuevas. El Excel original no se modifica.")
         self.btn_informe = ttk.Button(f3, text="Exportar informe (opcional)…", command=app.on_informe)
         self.btn_informe.pack(side="left", padx=8)
+        Ayuda(self.btn_informe, "Excel APARTE con el detalle de cambios y validaciones. No se carga en Presmed.")
         ttk.Label(f3, text="El Excel se guarda limpio (sin colores ni hojas nuevas) con las correcciones APLICADAS.",
                   style="Sub.TLabel").pack(side="left", padx=6)
         self._grupos_vista: List[Grupo] = []
@@ -136,36 +174,72 @@ class TabBalancear(ttk.Frame):
             self.aviso.mostrar(f"✔ Sin errores. Quedan {pend} correcciones opcionales sin aplicar. "
                                "Podés guardar el Excel (Paso 3).", "ok")
         elif pend:
-            extra = (f" Además hay {r.errores_propuesta} errores que hay que corregir a mano (ver pestaña «Ver Excel», "
-                     "filtro «Con errores»).") if r.errores_propuesta else ""
-            self.aviso.mostrar(f"El Excel tiene {r.errores_actuales} errores. Balidaf propone corregir {pend} grupos: "
-                               f"revisalos abajo y presioná «Aplicar todas» o elegí cuáles aplicar.{extra}", "info")
+            extra = (f" Además hay {r.errores_propuesta} errores para corregir a mano (pestaña «Ver Excel», "
+                     "filtro «Con errores»).") if r.errores_propuesta else " Si aplicás todas, quedan 0 errores."
+            self.aviso.mostrar(f"El Excel tiene {_texto_ln(r.errores_actuales)} errores. Balidaf propone "
+                               f"{_texto_ln(pend)} correcciones: usá los filtros de la izquierda para revisarlas "
+                               f"por tipo y aplicalas.{extra}", "info")
         else:
             self.aviso.mostrar(f"Quedan {r.errores_actuales} errores que el balanceo no puede corregir: hay que "
-                               "corregirlos en el Excel original (ver pestaña «Ver Excel», filtro «Con errores»).",
-                               "error")
+                               "corregirlos en el Excel original (pestaña «Ver Excel», filtro «Con errores»).", "error")
         self.refrescar_grupos()
+
+    def _elegir_filtro(self, seccion: str, valor: str) -> None:
+        if seccion == "estado":
+            self.f_estado = valor
+        else:
+            self.f_tipo = valor
+        self.refrescar_grupos()
+
+    def _cargar_filtros(self) -> None:
+        r = self.app.resultado
+        grupos = [g for g in r.grupos.values() if g.estado in (PENDIENTE, APLICADA)]
+        por_estado = {PENDIENTE: 0, APLICADA: 0}
+        for g in grupos:
+            por_estado[g.estado] += 1
+        en_estado = [g for g in grupos if self.f_estado == "Todas" or g.estado == self.f_estado]
+        por_tipo = {t: 0 for t in TIPOS}
+        for g in en_estado:
+            por_tipo[tipo_correccion(g)] += 1
+        estados = [(PENDIENTE, "Pendientes de aplicar", por_estado[PENDIENTE]),
+                   (APLICADA, "Aplicadas", por_estado[APLICADA]), ("Todas", "Todas", len(grupos))]
+        tipos = [("Todos", "Todos los tipos", len(en_estado))] + [(t, t, por_tipo[t]) for t in TIPOS]
+        self.filtro.cargar([
+            ("estado", "Estado de la corrección",
+             [(v, _con_marca(v == self.f_estado, t), n) for v, t, n in estados]),
+            ("tipo", "Tipo de corrección",
+             [(v, _con_marca(v == self.f_tipo, t), n) for v, t, n in tipos]),
+        ])
 
     def refrescar_grupos(self) -> None:
         r = self.app.resultado
         if r is None:
             return
-        filtro = self.var_filtro.get()
-        estados = {"Pendientes": (PENDIENTE,), "Aplicadas": (APLICADA,), "Todas": (PENDIENTE, APLICADA)}[filtro]
-        self._grupos_vista = [g for g in r.grupos.values() if g.estado in estados]
-        filas = []
+        self._cargar_filtros()
+        q = self.var_buscar.get().strip()
+        estados = (PENDIENTE, APLICADA) if self.f_estado == "Todas" else (self.f_estado,)
+        self._grupos_vista = [g for g in r.grupos.values() if g.estado in estados
+                              and (self.f_tipo == "Todos" or tipo_correccion(g) == self.f_tipo)
+                              and (not q or q in g.clave[0] or any(q in ln.clave for ln in g.lineas))]
+        filas, dif_total, n_lineas = [], 0, 0
         for i, g in enumerate(self._grupos_vista):
             cuil, _, pres, cod = g.clave
             apli_o = sum(ln.original["apli"] for ln in g.lineas)
             apli_n = sum(ln.propuesta["apli"] for ln in g.lineas)
-            nota = "Reduce retenciones (subsidio insuficiente)" if g.retenciones_reducidas else ""
-            if g.sobrante:
-                nota = f"No se puede balancear: sobran {fmt(g.sobrante)}"
-            filas.append((str(i), (g.estado, cuil, cod, pres, len(g.lineas), fmt(g.subsidio), fmt(apli_o), fmt(apli_n),
-                                   _motivo(r, g), nota), (ESTADO_TAG.get(g.estado, ""),)))
-        self.lbl_cant.config(text=f"{len(filas):,} grupos".replace(",", "."))
+            dif_total += apli_n - apli_o
+            n_lineas += len(g.lineas)
+            filas.append((str(i), (g.estado, tipo_correccion(g), cuil, cod, pres, len(g.lineas), fmt(g.subsidio),
+                                   fmt(apli_o), fmt(apli_n), fmt(apli_n - apli_o), _motivo(r, g)),
+                          (ESTADO_TAG.get(g.estado, ""),)))
+        txt_estado = {PENDIENTE: "pendientes", APLICADA: "aplicadas", "Todas": "(todas)"}[self.f_estado]
+        self.lbl_resumen.config(text=f"Mostrando {_texto_ln(len(filas))} grupos {txt_estado} · "
+                                     f"{_texto_ln(n_lineas)} líneas · diferencia en aplicado: {fmt(dif_total)}")
+        pend_vista = sum(1 for g in self._grupos_vista if g.estado == PENDIENTE)
+        self.btn_aplicar_lista.config(text=f"✔ Aplicar todas las de la lista ({_texto_ln(pend_vista)})")
+        self.lbl_sel.config(text="")
         self.t_grupos.cargar(filas)
         self.t_det.limpiar()
+        self.lbl_det.config(text="Seleccioná un grupo para ver el detalle línea por línea (original → corregido).")
 
     def _sel(self) -> List[Grupo]:
         return [self._grupos_vista[int(i)] for i in self.t_grupos.seleccionados()]
@@ -174,8 +248,14 @@ class TabBalancear(ttk.Frame):
         sel = self._sel()
         self.t_det.limpiar()
         if not sel:
+            self.lbl_sel.config(text="")
             return
+        self.lbl_sel.config(text=f"Seleccionados: {len(sel)} grupos · {sum(len(g.lineas) for g in sel)} líneas")
         g = sel[0]
+        apli_o = sum(ln.original["apli"] for ln in g.lineas)
+        self.lbl_det.config(text=f"CUIL {g.clave[0]} · práctica {g.clave[3]} · prestación {g.clave[2]}   │   "
+                                 f"Subsidio {fmt(g.subsidio)} · aplicado original {fmt(apli_o)} · "
+                                 f"{tipo_correccion(g)}")
         filas = []
         for ln in g.lineas:
             o, n = ln.original, ln.propuesta
@@ -188,12 +268,11 @@ class TabBalancear(ttk.Frame):
         self.t_det.cargar(filas)
 
     def aplicar_sel(self) -> None:
-        self.app.aplicar([g for g in self._sel() if g.estado == PENDIENTE], "seleccionadas")
+        self.app.aplicar([g for g in self._sel() if g.estado == PENDIENTE], "a los grupos seleccionados")
 
-    def aplicar_todo(self) -> None:
-        r = self.app.resultado
-        if r:
-            self.app.aplicar(r.grupos_con(PENDIENTE), "todas")
+    def aplicar_lista(self) -> None:
+        tipo = "" if self.f_tipo == "Todos" else f" de tipo «{self.f_tipo}»"
+        self.app.aplicar([g for g in self._grupos_vista if g.estado == PENDIENTE], f"a todos los grupos de la lista{tipo}")
 
     def deshacer_sel(self) -> None:
         self.app.deshacer([g for g in self._sel() if g.estado == APLICADA])
@@ -202,29 +281,32 @@ class TabBalancear(ttk.Frame):
         r = self.app.resultado
         hay = r is not None and not r.lote.faltantes
         self.btn_analizar.config(state="disabled" if ocupado else "normal")
-        for b in (self.btn_aplicar_sel, self.btn_aplicar_todo, self.btn_deshacer, self.btn_guardar):
+        for b in (self.btn_aplicar_sel, self.btn_aplicar_lista, self.btn_deshacer, self.btn_guardar):
             b.config(state="normal" if hay and not ocupado else "disabled")
         self.btn_informe.config(state="normal" if r and not ocupado else "disabled")
 
 
 # =====================================================================================
 class TabDevolucion(ttk.Frame):
-    """Paso opcional: cruzar la devolución de la SSS, ver la corrección propuesta y decidir aplicarla."""
+    """Cruzar la devolución de la SSS, ver la corrección propuesta de cada rechazo y decidir aplicarla."""
 
     def __init__(self, master, app: "BalidafApp"):
         super().__init__(master, padding=(14, 10))
         self.app = app
         self.cruce: Optional[ResultadoCruce] = None
+        self.f_estado = "Todos"
+        self.f_cod = "Todos"
 
-        ttk.Label(self, text="1 · Analizá el Excel original en la pestaña «1 · Balancear»   "
-                             "2 · Cargá el TXT de errores de la SSS   3 · Revisá y decidí qué corregir",
-                  style="Paso.TLabel").pack(anchor="w")
+        ttk.Label(self, text="1 · Analizá el Excel original en «1 · Balancear»   ›   2 · Cargá el TXT de errores de la SSS"
+                             "   ›   3 · Revisá y decidí qué corregir", style="Paso.TLabel").pack(anchor="w")
         f = fila(self, pady=(6, 6))
         self.btn_err = ttk.Button(f, text="Cargar TXT de errores (_ERR)…", style="Accent.TButton",
                                   command=lambda: app.on_cargar_txt("ERR"))
         self.btn_err.pack(side="left")
+        Ayuda(self.btn_err, "Archivo ######-AAAAMM_DR.DEVOLUCION_ERR.txt que devuelve la SSS.")
         self.btn_ok = ttk.Button(f, text="Cargar TXT aceptados (_OK) (opcional)…", command=lambda: app.on_cargar_txt("OK"))
         self.btn_ok.pack(side="left", padx=6)
+        Ayuda(self.btn_ok, "Opcional: permite saber cuántas líneas ACEPTADAS también cambian al corregir.")
         self.lbl_archivos = ttk.Label(f, text="Ningún TXT cargado.", style="Sub.TLabel")
         self.lbl_archivos.pack(side="left", padx=8)
 
@@ -244,50 +326,65 @@ class TabDevolucion(ttk.Frame):
             cont.columnconfigure(i, weight=1)
             self.tarjetas[k] = tj
 
-        lf1 = ttk.LabelFrame(self, text="Errores informados por la SSS (doble clic para filtrar)", padding=4)
-        lf1.pack(fill="x")
-        self.t_cod = Tabla(lf1, [("cod", "Código", 65), ("n", "Líneas", 65), ("res", "Lo resuelve", 100),
-                                 ("desc", "Descripción (instructivo SSS, Anexo IV)", 900)], altura=4,
-                           on_doble_click=self._filtrar_cod)
-        self.t_cod.pack(fill="x")
+        cuerpo = ttk.PanedWindow(self, orient="horizontal")
+        cuerpo.pack(fill="both", expand=True)
+        izq = ttk.Frame(cuerpo)
+        ttk.Label(izq, text="Filtrar por", style="Sub.TLabel").pack(anchor="w")
+        self.filtro = FiltroLateral(izq, self._elegir_filtro, ancho=360)
+        self.filtro.pack(fill="both", expand=True)
+        cuerpo.add(izq, weight=0)
 
-        cab = fila(self, pady=(8, 4))
-        ttk.Label(cab, text="Detalle por línea", style="Paso.TLabel").pack(side="left")
-        ttk.Label(cab, text="   Estado:").pack(side="left")
-        self.var_estado = tk.StringVar(value="Todos")
-        cb = ttk.Combobox(cab, textvariable=self.var_estado, width=32, state="readonly", values=["Todos"] + ESTADOS)
-        cb.pack(side="left", padx=4)
-        cb.bind("<<ComboboxSelected>>", lambda e: self.mostrar_detalle())
-        ttk.Label(cab, text="  Código:").pack(side="left")
-        self.var_cod = tk.StringVar(value="Todos")
-        self.cb_cod = ttk.Combobox(cab, textvariable=self.var_cod, width=7, state="readonly", values=["Todos"])
-        self.cb_cod.pack(side="left", padx=4)
-        self.cb_cod.bind("<<ComboboxSelected>>", lambda e: self.mostrar_detalle())
+        der = ttk.Frame(cuerpo)
+        cuerpo.add(der, weight=1)
+        bus = fila(der, pady=(0, 4))
+        ttk.Label(bus, text="Buscar CUIL o clave:").pack(side="left")
+        self.var_buscar = tk.StringVar()
+        e = ttk.Entry(bus, textvariable=self.var_buscar, width=18)
+        e.pack(side="left", padx=4)
+        e.bind("<Return>", lambda ev: self.mostrar_detalle())
+        ttk.Button(bus, text="Buscar", command=self.mostrar_detalle).pack(side="left")
+        ttk.Button(bus, text="Limpiar", command=lambda: (self.var_buscar.set(""), self.mostrar_detalle())).pack(side="left", padx=4)
+        self.lbl_resumen = ttk.Label(bus, text="", style="Sub.TLabel")
+        self.lbl_resumen.pack(side="left", padx=10)
 
-        acc = fila(self, pady=(0, 4))
+        acc = fila(der, pady=(0, 4))
         self.btn_aplicar_sel = ttk.Button(acc, text="✔ Corregir seleccionadas en el Excel", command=self.aplicar_sel)
         self.btn_aplicar_sel.pack(side="left")
-        self.btn_aplicar_todo = ttk.Button(acc, text="✔ Corregir todas las que tienen propuesta", command=self.aplicar_todo)
-        self.btn_aplicar_todo.pack(side="left", padx=6)
+        Ayuda(self.btn_aplicar_sel, "Aplica la corrección propuesta a las líneas marcadas.\n"
+                                    "Se corrige todo el grupo de la línea (CUIL + períodos + práctica).")
+        self.btn_aplicar_lista = ttk.Button(acc, text="✔ Corregir todas las de la lista", command=self.aplicar_lista)
+        self.btn_aplicar_lista.pack(side="left", padx=6)
+        Ayuda(self.btn_aplicar_lista, "Aplica la corrección a todas las líneas con propuesta que se ven en la lista.")
         self.btn_deshacer = ttk.Button(acc, text="↶ Deshacer seleccionadas", command=self.deshacer_sel)
         self.btn_deshacer.pack(side="left")
-        ttk.Label(acc, text="La corrección se aplica a todo el grupo de la línea (CUIL + períodos + práctica).",
-                  style="Sub.TLabel").pack(side="left", padx=10)
 
-        self.t_det = Tabla(self, [("clave", "Clave", 100), ("cuil", "CUIL", 100), ("fila", "Fila", 50),
-                                  ("err", "Error SSS", 85), ("estado", "Estado", 210),
-                                  ("corr", "Corrección propuesta (original → corregido)", 640),
-                                  ("pend", "Qué falta", 110)], altura=9, seleccion="extended",
+        pan = ttk.PanedWindow(der, orient="vertical")
+        pan.pack(fill="both", expand=True)
+        self.t_det = Tabla(pan, [("clave", "Clave", 100), ("cuil", "CUIL", 100), ("fila", "Fila", 50),
+                                 ("err", "Error SSS", 80), ("estado", "Estado", 215),
+                                 ("corr", "Corrección propuesta (original → corregido)", 600),
+                                 ("pend", "Qué falta", 100)], altura=8, seleccion="extended",
                            on_doble_click=self._abrir)
-        self.t_det.pack(fill="both", expand=True)
+        self.t_det.tree.bind("<<TreeviewSelect>>", lambda e: self._mostrar_linea())
+        pan.add(self.t_det, weight=3)
+        caja = ttk.Frame(pan)
+        ttk.Label(caja, text="Detalle de la línea seleccionada", style="Paso.TLabel").pack(anchor="w", pady=(4, 2))
+        self.txt = tk.Text(caja, height=6, wrap="word", relief="flat", bg="#f5f7fa", padx=10, pady=6,
+                           font=(FUENTE, 10))
+        self.txt.tag_configure("b", font=(FUENTE, 10, "bold"))
+        self.txt.tag_configure("rojo", foreground=ROJO)
+        self.txt.pack(fill="both", expand=True)
+        self.txt.configure(state="disabled")
+        pan.add(caja, weight=1)
         self._lineas = []
 
+    # ------------------------------------------------------------------
     def actualizar_archivos(self) -> None:
         partes = []
         if self.app.txt_err:
-            partes.append(f"ERR: {self.app.txt_err.nombre} ({len(self.app.txt_err.registros):,} líneas)".replace(",", "."))
+            partes.append(f"ERR: {self.app.txt_err.nombre} ({_texto_ln(len(self.app.txt_err.registros))} líneas)")
         if self.app.txt_ok:
-            partes.append(f"OK: {self.app.txt_ok.nombre} ({len(self.app.txt_ok.registros):,} líneas)".replace(",", "."))
+            partes.append(f"OK: {self.app.txt_ok.nombre} ({_texto_ln(len(self.app.txt_ok.registros))} líneas)")
         self.lbl_archivos.config(text="   ·   ".join(partes) or "Ningún TXT cargado.")
 
     def mostrar(self, cruce: Optional[ResultadoCruce]) -> None:
@@ -296,7 +393,6 @@ class TabDevolucion(ttk.Frame):
         if cruce is None:
             for t in self.tarjetas.values():
                 t.set("–")
-            self.t_cod.limpiar()
             self.t_det.limpiar()
             if self.app.txt_err and self.app.resultado is None:
                 self.aviso.mostrar("TXT cargado. Ahora analizá el Excel ORIGINAL en la pestaña «1 · Balancear» "
@@ -307,60 +403,111 @@ class TabDevolucion(ttk.Frame):
             self.tarjetas[k].set(cruce.por_estado.get(k, 0))
         n_prop = cruce.por_estado.get(PROPUESTA, 0)
         if n_prop:
-            extra = (f" Ojo: además {cruce.aceptadas_que_cambian} líneas ACEPTADAS por la SSS pertenecen a esos grupos y "
+            extra = (f" Ojo: {_texto_ln(cruce.aceptadas_que_cambian)} líneas ACEPTADAS por la SSS están en esos grupos y "
                      "también cambian." if cruce.aceptadas_que_cambian else "")
-            self.aviso.mostrar(f"{n_prop} líneas rechazadas tienen una corrección propuesta. Revisala en «Corrección "
-                               f"propuesta» y presioná «Corregir…» para aplicarla.{extra}", "info")
+            self.aviso.mostrar(f"{_texto_ln(n_prop)} líneas rechazadas tienen una corrección propuesta. Revisala y "
+                               f"presioná «Corregir…» para aplicarla.{extra}", "info")
         elif cruce.por_estado.get(PENDIENTE_MANUAL, 0):
             self.aviso.mostrar("Quedan líneas que requieren corrección manual en el Excel original (columna «Qué falta»).",
                                "error")
         else:
             self.aviso.mostrar("No quedan correcciones pendientes para las líneas rechazadas. "
                                "Guardá el Excel en la pestaña «1 · Balancear» (Paso 3).", "ok")
-        filas = []
-        for cod, n in sorted(cruce.por_codigo.items()):
-            c = CODIGOS.get(cod)
-            filas.append((cod, (cod, n, c.resuelve if c else "", c.descripcion if c else "No figura en el instructivo"), ()))
-        self.t_cod.cargar(filas)
-        self.cb_cod.config(values=["Todos"] + sorted(cruce.por_codigo))
         self.mostrar_detalle()
 
-    def _filtrar_cod(self, cod: str) -> None:
-        self.var_cod.set(cod)
+    def _elegir_filtro(self, seccion: str, valor: str) -> None:
+        if seccion == "estado":
+            self.f_estado = valor
+        else:
+            self.f_cod = valor
         self.mostrar_detalle()
+
+    def _cargar_filtros(self) -> None:
+        cr = self.cruce
+        en_estado = [l for l in cr.lineas if self.f_estado == "Todos" or l.estado == self.f_estado]
+        cods = {}
+        for l in en_estado:
+            for c in l.codigos_sss:
+                cods[c] = cods.get(c, 0) + 1
+        estados = [("Todos", "Todos", len(cr.lineas))] + [(e, e, cr.por_estado.get(e, 0)) for e in ESTADOS
+                                                          if cr.por_estado.get(e, 0)]
+        codigos = [("Todos", "Todos los errores", len(en_estado))] + [
+            (c, f"{c} · {CODIGOS[c].campo.title() if c in CODIGOS else ''}", n) for c, n in sorted(cods.items())]
+        self.filtro.cargar([
+            ("estado", "Estado", [(v, _con_marca(v == self.f_estado, t), n) for v, t, n in estados]),
+            ("cod", "Error informado por la SSS", [(v, _con_marca(v == self.f_cod, t), n) for v, t, n in codigos]),
+        ])
 
     def mostrar_detalle(self) -> None:
         cr = self.cruce
         if not cr:
             return
-        est, cod = self.var_estado.get(), self.var_cod.get()
+        self._cargar_filtros()
+        q = self.var_buscar.get().strip()
         tags = {PROPUESTA: "prop", APLICADA_TXT: "ok", YA_CUMPLE: "ok", PENDIENTE_MANUAL: "error",
                 PENDIENTE_SISTEMAS: "warn", NO_ENCONTRADO: "gris"}
-        self._lineas = [l for l in cr.lineas if (est == "Todos" or l.estado == est)
-                        and (cod == "Todos" or cod in l.codigos_sss)]
+        self._lineas = [l for l in cr.lineas if (self.f_estado == "Todos" or l.estado == self.f_estado)
+                        and (self.f_cod == "Todos" or self.f_cod in l.codigos_sss)
+                        and (not q or q in l.cuil or q in l.clave)]
         filas = [(str(i), (l.clave, l.cuil, l.fila or "", " ".join(l.codigos_sss), l.estado, l.correccion or "—",
                            " ".join(l.pendientes)), (tags.get(l.estado, ""),))
                  for i, l in enumerate(self._lineas)]
+        n_prop = sum(1 for l in self._lineas if l.estado == PROPUESTA)
+        self.lbl_resumen.config(text=f"Mostrando {_texto_ln(len(filas))} líneas · {_texto_ln(n_prop)} con corrección propuesta")
+        self.btn_aplicar_lista.config(text=f"✔ Corregir todas las de la lista ({_texto_ln(n_prop)})")
         self.t_det.cargar(filas)
+        self._escribir("Seleccioná una línea para ver la explicación completa del error y de la corrección.")
 
-    def _grupos_sel(self, estado_grupo: str) -> List[Grupo]:
+    def _escribir(self, *partes) -> None:
+        self.txt.configure(state="normal")
+        self.txt.delete("1.0", "end")
+        for p in partes:
+            if isinstance(p, tuple):
+                self.txt.insert("end", p[0], p[1])
+            else:
+                self.txt.insert("end", p)
+        self.txt.configure(state="disabled")
+
+    def _mostrar_linea(self) -> None:
+        sel = self.t_det.seleccionados()
+        if not sel:
+            return
+        l = self._lineas[int(sel[0])]
+        partes = [(f"Clave {l.clave} · CUIL {l.cuil} · fila {l.fila or '—'} · {l.estado}\n", "b")]
+        for c in l.codigos_sss:
+            d = CODIGOS.get(c)
+            partes.append((f"Error {c}: ", "b"))
+            partes.append(f"{d.descripcion if d else 'No figura en el instructivo'}"
+                          + (f"  →  {d.accion} (lo resuelve: {d.resuelve})" if d else "") + "\n")
+        if l.correccion:
+            partes += [("Corrección propuesta: ", "b"), l.correccion + "\n"]
+        if l.pendientes:
+            partes.append(("Qué falta (no se corrige solo): ", ("b", "rojo")))
+            partes.append(" | ".join(f"{c}: {CODIGOS[c].descripcion}" for c in l.pendientes if c in CODIGOS) + "\n")
+        if len(sel) > 1:
+            partes.append((f"\n({len(sel)} líneas seleccionadas)", "b"))
+        self._escribir(*partes)
+
+    def _grupos_de(self, lineas, estado_grupo: str) -> List[Grupo]:
         vistos, res = set(), []
-        for iid in self.t_det.seleccionados():
-            g = self._lineas[int(iid)].grupo
+        for l in lineas:
+            g = l.grupo
             if g is not None and g.estado == estado_grupo and id(g) not in vistos:
                 vistos.add(id(g))
                 res.append(g)
         return res
 
     def aplicar_sel(self) -> None:
-        self.app.aplicar(self._grupos_sel(PENDIENTE), "seleccionadas")
+        lineas = [self._lineas[int(i)] for i in self.t_det.seleccionados()]
+        self.app.aplicar(self._grupos_de(lineas, PENDIENTE), "a las líneas seleccionadas")
 
-    def aplicar_todo(self) -> None:
-        if self.cruce:
-            self.app.aplicar(self.cruce.grupos((PROPUESTA,)), "de las líneas rechazadas")
+    def aplicar_lista(self) -> None:
+        self.app.aplicar(self._grupos_de([l for l in self._lineas if l.estado == PROPUESTA], PENDIENTE),
+                         "a todas las líneas rechazadas de la lista")
 
     def deshacer_sel(self) -> None:
-        self.app.deshacer(self._grupos_sel(APLICADA))
+        lineas = [self._lineas[int(i)] for i in self.t_det.seleccionados()]
+        self.app.deshacer(self._grupos_de(lineas, APLICADA))
 
     def _abrir(self, iid: str) -> None:
         l = self._lineas[int(iid)]
@@ -371,7 +518,7 @@ class TabDevolucion(ttk.Frame):
         hay = self.cruce is not None
         for b in (self.btn_err, self.btn_ok):
             b.config(state="disabled" if ocupado else "normal")
-        for b in (self.btn_aplicar_sel, self.btn_aplicar_todo, self.btn_deshacer):
+        for b in (self.btn_aplicar_sel, self.btn_aplicar_lista, self.btn_deshacer):
             b.config(state="normal" if hay and not ocupado else "disabled")
 
 
@@ -379,6 +526,9 @@ class TabDevolucion(ttk.Frame):
 class TabExcel(ttk.Frame):
     """El Excel completo con los valores actuales (los colores son sólo de la pantalla)."""
 
+    VISTAS = ["Importes y datos clave", "Todas las columnas del Excel"]
+    CLAVE = ["clave", "cuil", "cod", "per_prest", "cuit_cbu", "cbu", "subsidiado", "solicitado", "ret_gan",
+             "ret_iibb", "ret_otras", "apli", "transferido", "fdo_ppio"]
     FILTROS = ["Todas", "Con corrección pendiente", "Corregidas (aplicadas)", "Con errores", "Con advertencias",
                "Con retenciones reducidas"]
 
@@ -398,6 +548,11 @@ class TabExcel(ttk.Frame):
         e.pack(side="left", padx=4)
         e.bind("<Return>", lambda ev: self.refrescar())
         ttk.Button(f, text="Buscar", command=self.refrescar).pack(side="left")
+        ttk.Label(f, text="   Columnas:").pack(side="left")
+        self.var_cols = tk.StringVar(value=self.VISTAS[0])
+        cb2 = ttk.Combobox(f, textvariable=self.var_cols, width=26, state="readonly", values=self.VISTAS)
+        cb2.pack(side="left", padx=4)
+        cb2.bind("<<ComboboxSelected>>", lambda e: self.refrescar())
         self.lbl = ttk.Label(f, text="", style="Sub.TLabel")
         self.lbl.pack(side="right")
 
@@ -417,16 +572,24 @@ class TabExcel(ttk.Frame):
         self.var_filtro.set(filtro)
         self.sucio = True
 
-    def _armar_tabla(self, encabezados: List[str], muestra: List[List]) -> None:
+    def _indices(self, lote) -> List[int]:
+        """Columnas del Excel (índice 0-based) a mostrar según la vista elegida."""
+        if self.var_cols.get() == self.VISTAS[0]:
+            return [lote.columnas[k] - 1 for k in self.CLAVE if k in lote.columnas]
+        return list(range(len(lote.encabezados)))
+
+    def _armar_tabla(self, encabezados: List[str], muestra: List[List], indices: List[int]) -> None:
         if self.tabla:
             self.tabla.destroy()
         self.msg.pack_forget()
-        cols = [("_fila", "Fila", 55), ("_estado", "Estado", 130)]
-        for i, h in enumerate(encabezados):
+        cols = [("_fila", "Fila", 55), ("_estado", "Estado", 205)]
+        for i in indices:
+            h = encabezados[i]
             largo = max([len(h or "")] + [len(texto_celda(f[i])) for f in muestra if i < len(f)])
             cols.append((f"c{i}", h or f"Col {i + 1}", max(70, min(220, largo * 8 + 24))))
         self.tabla = Tabla(self.cont, cols, altura=22, on_doble_click=lambda iid: self.app.abrir_detalle(int(iid)))
         self.tabla.pack(fill="both", expand=True)
+        self._vista_actual = tuple(indices)
 
     def refrescar(self) -> None:
         self.sucio = False
@@ -434,8 +597,9 @@ class TabExcel(ttk.Frame):
         if r is None:
             return
         lote = r.lote
-        if self.tabla is None or len(self.tabla.ids) != len(lote.encabezados) + 2:
-            self._armar_tabla(lote.encabezados, lote.filas[:300])
+        indices = self._indices(lote)
+        if self.tabla is None or getattr(self, "_vista_actual", None) != tuple(indices):
+            self._armar_tabla(lote.encabezados, lote.filas[:300], indices)
         col_a_clave = {v: k for k, v in lote.columnas.items()}
         errores, advs = r.filas_con(ERROR), r.filas_con(ADVERTENCIA)
         estado_grupo = {ln.fila: g.estado for g in r.grupos.values() for ln in g.lineas}
@@ -470,8 +634,9 @@ class TabExcel(ttk.Frame):
             else:
                 estado, tag = "OK", ""
             vals = [ln.fila, estado]
-            for j, v in enumerate(crudo, start=1):
-                k = col_a_clave.get(j)
+            for i in indices:
+                k = col_a_clave.get(i + 1)
+                v = crudo[i] if i < len(crudo) else None
                 vals.append(fmt(ln.monto[k]) if k in ln.monto else texto_celda(v))
             filas.append((str(ln.fila), vals, (tag,) if tag else ()))
         self.lbl.config(text=f"{len(filas):,} de {len(lote.lineas):,} líneas".replace(",", "."))

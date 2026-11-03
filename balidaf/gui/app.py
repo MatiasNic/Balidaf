@@ -91,7 +91,9 @@ class BalidafApp(tk.Tk):
         self._ocupado = True
         self._habilitar()
         self.progreso.iniciar(titulo, pasos)
-        self.progreso.pack(fill="x", padx=10, pady=(8, 0), before=self.nb)
+        # flota sobre la ventana (no empuja el contenido)
+        self.progreso.place(relx=0.5, y=56, anchor="n", relwidth=0.9)
+        self.progreso.lift()
         self.config(cursor="watch")
 
         def run():
@@ -110,7 +112,7 @@ class BalidafApp(tk.Tk):
         self._ocupado = False
         despues()
         self._habilitar()
-        self.after(2500 if ok else 6000, lambda: (not self._ocupado) and self.progreso.pack_forget())
+        self.after(2000 if ok else 6000, lambda: (not self._ocupado) and self.progreso.place_forget())
 
     def _error(self, titulo: str, msg: str) -> None:
         messagebox.showerror("Balidaf", f"{titulo}.\n\n{msg}\n\nDetalle técnico en '{ERROR_LOG_NAME}'.")

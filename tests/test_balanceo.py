@@ -111,3 +111,18 @@ def test_ejemplo_completo_queda_sin_errores(tmp_path):
     balancear(ls)
     assert _errores(ls) == []
     assert all(l.monto["transferido"] >= 0 and l.monto["fdo_ppio"] >= 0 for l in ls)
+
+
+def test_tipo_de_correccion(excel):
+    from balidaf.balanceo import (TIPO_CENTAVOS, TIPO_DE_MAS, TIPO_DE_MENOS, TIPO_NO_BALANCEA,
+                                  TIPO_RETENCIONES, proponer, tipo_correccion)
+    ls = _lineas(excel, [
+        dict(cuil="20960308248", importe_subsidiado=100, importe_solicitado=150, impor_apli_sss=150, importe_transferido=150),
+        dict(cuil="27628194829", importe_subsidiado=100, importe_solicitado=100, impor_apli_sss=99.5, importe_transferido=99.5),
+        dict(cuil="20000000019", importe_subsidiado=100, importe_solicitado=150, impor_apli_sss=50, importe_transferido=50,
+             fdo_ppio_ingre_cta_disca=100),
+        dict(cuil="20000000027", importe_subsidiado=10, importe_solicitado=150, retencion_ganancias=50),
+        dict(cuil="20000000035", importe_subsidiado=500, importe_solicitado=100),
+    ])
+    tipos = [tipo_correccion(g) for g in proponer(ls).values()]
+    assert tipos == [TIPO_DE_MAS, TIPO_CENTAVOS, TIPO_DE_MENOS, TIPO_RETENCIONES, TIPO_NO_BALANCEA]
