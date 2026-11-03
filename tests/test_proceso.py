@@ -2,9 +2,10 @@
 
 from openpyxl import load_workbook
 
-from balidaf.devolucion import CORREGIDO, PENDIENTE_SISTEMAS, cruzar
+from balidaf.balanceo import APLICADA, PENDIENTE
+from balidaf.devolucion import APLICADA_TXT, PENDIENTE_SISTEMAS, PROPUESTA, cruzar
 from balidaf.informe import exportar
-from balidaf.proceso import guardar, procesar
+from balidaf.proceso import analizar, guardar, procesar
 from balidaf.sss_txt import leer_txt
 from generar_ejemplo import ENCABEZADOS, construir
 
@@ -74,11 +75,43 @@ def test_cruce_con_devolucion(tmp_path, excel):
         dict(clave_rendicion="84600000002", cod_prestac="096", importe_subsidiado=50, importe_solicitado=50,
              impor_apli_sss=50, importe_transferido=50, fdo_ppio_ingre_cta_disca=0),
     ])
-    r = procesar(ruta)
+    r = analizar(ruta)                    # sólo analiza: NO aplica nada
     p = tmp_path / "999999-202606_DR.DEVOLUCION_ERR.txt"
     p.write_text(_linea_txt("84600000001", "20960308248", "090", 100, 150, "-623-624") + "\n" +
                  _linea_txt("84600000002", "20960308248", "096", 50, 50, "-699{}") + "\n")
-    c = cruzar(r.lote, r.despues, leer_txt(str(p)))
+    err = leer_txt(str(p))
+    c = cruzar(r, err)
     estados = {l.clave: l.estado for l in c.lineas}
-    assert estados == {"84600000001": CORREGIDO, "84600000002": PENDIENTE_SISTEMAS}
+    assert estados == {"84600000001": PROPUESTA, "84600000002": PENDIENTE_SISTEMAS}
     assert c.por_codigo == {"623": 1, "624": 1, "699": 1}
+    l1 = c.lineas[0]
+    assert "150,00 → 100,00" in l1.correccion and "0,00 → 50,00" in l1.correccion
+    assert r.lote.lineas[0].monto["apli"] == 15000          # todavía sin aplicar
+
+    # el usuario decide aplicar las correcciones de las líneas rechazadas
+    r.aplicar(c.grupos())
+    c2 = cruzar(r, err)
+    assert c2.lineas[0].estado == APLICADA_TXT
+    assert r.lote.lineas[0].monto["apli"] == 10000
+    assert r.listo_para_presmed
+
+
+def test_proponer_aplicar_y_deshacer(tmp_path):
+    ruta = str(tmp_path / "lote.xlsx")
+    construir(40, 5).save(ruta)
+    r = analizar(ruta)
+    pend = r.grupos_con(PENDIENTE)
+    assert pend and r.errores_actuales == r.errores_antes > 0
+    assert r.errores_propuesta == 0
+    assert r.lineas_modificadas == 0                      # nada aplicado todavía
+
+    r.aplicar(pend[:1])
+    assert r.grupos_con(APLICADA) == pend[:1]
+    assert 0 < r.errores_actuales < r.errores_antes
+
+    r.deshacer(pend[:1])
+    assert r.lineas_modificadas == 0
+    assert r.errores_actuales == r.errores_antes
+
+    r.aplicar(r.grupos_con(PENDIENTE))
+    assert r.listo_para_presmed

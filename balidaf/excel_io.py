@@ -58,6 +58,7 @@ class Linea:
     crudo: Dict[str, Any] = field(default_factory=dict)
     original: Dict[str, int] = field(default_factory=dict)   # importes leídos (centavos)
     monto: Dict[str, int] = field(default_factory=dict)      # importes actuales (centavos)
+    propuesta: Dict[str, int] = field(default_factory=dict)  # importes propuestos por el balanceo
     problemas_monto: Dict[str, str] = field(default_factory=dict)
 
     @property
@@ -78,7 +79,12 @@ class Linea:
         return sum(self.monto[k] for k in RETENCIONES)
 
     def modificados(self) -> List[str]:
+        """Importes que ya cambiaron (corrección aplicada)."""
         return [k for k in IMPORTES if self.monto[k] != self.original[k]]
+
+    def propuestos(self) -> List[str]:
+        """Importes que la corrección propuesta cambiaría."""
+        return [k for k in IMPORTES if self.propuesta.get(k, self.original[k]) != self.original[k]]
 
 
 @dataclass
@@ -126,7 +132,7 @@ def _mapear(encabezados: List[Any]) -> Tuple[Dict[str, int], List[str]]:
 
 def leer_excel(ruta: str, progreso: Optional[ProgFn] = None) -> Lote:
     progreso = progreso or (lambda *a: None)
-    progreso("Leyendo Excel…", 0, 1)
+    progreso("Abriendo el Excel (puede tardar unos segundos)…", 0, 0)   # 0/0 = sin porcentaje
     wb = load_workbook(ruta)          # una sola lectura: se reutiliza al guardar
     ws = wb.worksheets[0]
     filas_iter = ws.iter_rows(values_only=True)

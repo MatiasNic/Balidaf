@@ -21,12 +21,17 @@ subsidio no alcanza, las retenciones. Nunca se tocan los campos 2 a 9 (regla 602
 
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Iterable, List, Optional, Tuple
 
 from .excel_io import Linea
 from .schema import OTROS_DESTINOS_SOLICITADO, OTROS_DESTINOS_SUBSIDIO, RETENCIONES
 
 ProgFn = Callable[[str, int, int], None]
+
+# Estado de la corrección propuesta para un grupo
+SIN_CAMBIOS = "Sin cambios"
+PENDIENTE = "Pendiente"
+APLICADA = "Aplicada"
 
 
 @dataclass
@@ -38,6 +43,11 @@ class Grupo:
     aplicado: int = 0              # Σ aplicado luego del balanceo
     sobrante: int = 0              # subsidio que no se pudo aplicar (> 0 ⇒ no balancea)
     retenciones_reducidas: List[int] = field(default_factory=list)   # filas
+    estado: str = SIN_CAMBIOS      # SIN_CAMBIOS | PENDIENTE | APLICADA
+
+    @property
+    def tiene_propuesta(self) -> bool:
+        return self.estado in (PENDIENTE, APLICADA)
 
     @property
     def nombre(self) -> str:
@@ -121,3 +131,47 @@ def balancear(lineas: List[Linea], progreso: Optional[ProgFn] = None) -> "Ordere
         if i % 500 == 0 or i == total:
             progreso("Balanceando grupos…", i, total)
     return grupos
+
+
+# ----------------------------------------------------------------------------------------------
+# Propuesta → el usuario decide → aplicar / deshacer
+# ----------------------------------------------------------------------------------------------
+def proponer(lineas: List[Linea], progreso: Optional[ProgFn] = None) -> "OrderedDict[Tuple, Grupo]":
+    """Calcula el balanceo SIN aplicarlo.
+
+    Cada línea guarda la corrección en ``ln.propuesta``; ``ln.monto`` queda con los valores
+    originales hasta que el usuario decide aplicar (``aplicar``).
+    """
+    for ln in lineas:
+        ln.monto = dict(ln.original)
+    grupos = balancear(lineas, progreso)
+    for g in grupos.values():
+        for ln in g.lineas:
+            ln.propuesta = dict(ln.monto)
+            ln.monto = dict(ln.original)
+        g.estado = PENDIENTE if any(ln.propuesta != ln.original for ln in g.lineas) else SIN_CAMBIOS
+    return grupos
+
+
+def aplicar(grupos: Iterable[Grupo]) -> int:
+    """Aplica la corrección propuesta. Devuelve cuántos grupos se aplicaron."""
+    n = 0
+    for g in grupos:
+        if g.estado == PENDIENTE:
+            for ln in g.lineas:
+                ln.monto = dict(ln.propuesta)
+            g.estado = APLICADA
+            n += 1
+    return n
+
+
+def deshacer(grupos: Iterable[Grupo]) -> int:
+    """Vuelve los grupos a sus valores originales. Devuelve cuántos se deshicieron."""
+    n = 0
+    for g in grupos:
+        if g.estado == APLICADA:
+            for ln in g.lineas:
+                ln.monto = dict(ln.original)
+            g.estado = PENDIENTE
+            n += 1
+    return n

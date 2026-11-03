@@ -1,9 +1,9 @@
 """
-Cruce de la devolución de la SSS (TXT _ERR y _OK) con el Excel.
+Cruce de la devolución de la SSS (TXT _ERR y _OK) con el Excel analizado.
 
-Para cada registro rechazado indica:
-  - qué errores informó la SSS y qué significan (Anexo IV),
-  - si el balanceo de Balidaf lo deja corregido (se vuelve a validar la línea y su grupo),
+NO corrige nada por sí solo: para cada registro rechazado muestra
+  - los errores que informó la SSS y qué significan (Anexo IV),
+  - la corrección que propone Balidaf (antes → después) para que el usuario decida aplicarla,
   - o si requiere corrección manual / de Sistemas.
 """
 
@@ -11,15 +11,21 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from .excel_io import Lote
-from .schema import CODIGOS, MANUAL, SISTEMAS
+from .balanceo import APLICADA, PENDIENTE, Grupo
+from .montos import fmt
+from .schema import CODIGOS, COL, MANUAL, SISTEMAS
 from .sss_txt import ArchivoTxt
-from .validacion import ERROR, Hallazgo
+from .validacion import ERROR
 
-CORREGIDO = "Corregido (ya cumple las reglas)"
+PROPUESTA = "Corrección propuesta (sin aplicar)"
+APLICADA_TXT = "Corrección aplicada"
+YA_CUMPLE = "Ya cumple las reglas en el Excel"
 PENDIENTE_MANUAL = "Requiere corrección manual"
 PENDIENTE_SISTEMAS = "Lo resuelve Sistemas / Presmed"
 NO_ENCONTRADO = "No está en el Excel"
+
+ESTADOS = [PROPUESTA, APLICADA_TXT, PENDIENTE_MANUAL, PENDIENTE_SISTEMAS, YA_CUMPLE, NO_ENCONTRADO]
+CAMPOS_RESUMEN = ["apli", "transferido", "fdo_ppio", "ret_gan", "ret_iibb", "ret_otras"]
 
 
 @dataclass
@@ -28,9 +34,10 @@ class CruceLinea:
     cuil: str
     fila: int                       # fila en el Excel (0 si no está)
     codigos_sss: List[str]
-    error_crudo: str
     estado: str
-    errores_actuales: List[str] = field(default_factory=list)
+    correccion: str = ""            # texto antes → después
+    pendientes: List[str] = field(default_factory=list)   # errores que la corrección NO resuelve
+    grupo: Optional[Grupo] = None
 
 
 @dataclass
@@ -38,18 +45,37 @@ class ResultadoCruce:
     lineas: List[CruceLinea]
     por_codigo: Counter
     por_estado: Counter
-    aceptadas_modificadas: int = 0  # líneas que estaban OK y el balanceo modificó
+    aceptadas_que_cambian: int = 0  # líneas aceptadas cuyo grupo tiene corrección
     total_ok: int = 0
     total_err: int = 0
 
+    def grupos(self, estados=(PROPUESTA,)) -> List[Grupo]:
+        vistos, res = set(), []
+        for l in self.lineas:
+            if l.grupo is not None and l.estado in estados and id(l.grupo) not in vistos:
+                vistos.add(id(l.grupo))
+                res.append(l.grupo)
+        return res
 
-def cruzar(lote: Lote, hallazgos: List[Hallazgo], err: Optional[ArchivoTxt],
-           ok: Optional[ArchivoTxt] = None) -> ResultadoCruce:
+
+def texto_correccion(ln) -> str:
+    partes = []
+    for k in CAMPOS_RESUMEN:
+        o, n = ln.original[k], ln.propuesta.get(k, ln.original[k])
+        if o != n:
+            partes.append(f"{COL[k].titulo}: {fmt(o)} → {fmt(n)}")
+    return " · ".join(partes)
+
+
+def cruzar(resultado, err: Optional[ArchivoTxt], ok: Optional[ArchivoTxt] = None) -> ResultadoCruce:
+    lote = resultado.lote
     por_clave = {ln.clave: ln for ln in lote.lineas}
-    errores_por_fila: Dict[int, List[str]] = defaultdict(list)
-    for h in hallazgos:
+    grupo_de: Dict[int, Grupo] = {ln.fila: g for g in resultado.grupos.values() for ln in g.lineas}
+    err_propuesta: Dict[int, List[str]] = defaultdict(list)
+    for h in resultado.propuesta:
         if h.nivel == ERROR and h.fila:
-            errores_por_fila[h.fila].append(h.codigo)
+            err_propuesta[h.fila].append(h.codigo)
+    err_actual = {h.fila for h in resultado.actual if h.nivel == ERROR and h.fila}
 
     lineas: List[CruceLinea] = []
     cnt_cod: Counter = Counter()
@@ -59,27 +85,39 @@ def cruzar(lote: Lote, hallazgos: List[Hallazgo], err: Optional[ArchivoTxt],
         cnt_cod.update(r.errores)
         ln = por_clave.get(r.clave)
         if ln is None:
-            estado, actuales, fila = NO_ENCONTRADO, [], 0
+            lineas.append(CruceLinea(r.clave, r.texto.get("cuil", ""), 0, r.errores, NO_ENCONTRADO))
+            continue
+        g = grupo_de.get(ln.fila)
+        quien = {CODIGOS[c].resuelve if c in CODIGOS else MANUAL for c in r.errores}
+        pendientes = sorted(set(err_propuesta.get(ln.fila, [])))
+        if SISTEMAS in quien:
+            estado = PENDIENTE_SISTEMAS
+        elif pendientes:
+            estado = PENDIENTE_MANUAL
+        elif g is not None and g.estado == PENDIENTE:
+            estado = PROPUESTA
+        elif g is not None and g.estado == APLICADA:
+            estado = APLICADA_TXT
         else:
-            fila = ln.fila
-            actuales = sorted(set(errores_por_fila.get(ln.fila, [])))
-            quien = {CODIGOS[c].resuelve if c in CODIGOS else MANUAL for c in r.errores}
-            if SISTEMAS in quien:
-                estado = PENDIENTE_SISTEMAS
-            elif actuales:
-                estado = PENDIENTE_MANUAL
+            estado = YA_CUMPLE if ln.fila not in err_actual else PENDIENTE_MANUAL
+        correccion = texto_correccion(ln) if g is not None and g.tiene_propuesta else ""
+        if g is not None and g.tiene_propuesta and len(g.lineas) > 1:
+            if correccion:
+                correccion += f" · (grupo de {len(g.lineas)} líneas)"
             else:
-                estado = CORREGIDO
-        lineas.append(CruceLinea(r.clave, r.texto.get("cuil", ""), fila, r.errores, r.error_crudo, estado, actuales))
+                correccion = (f"Esta línea queda igual: se corrige otra línea de su grupo "
+                              f"({len(g.lineas)} líneas). Doble clic para ver el grupo.")
+        lineas.append(CruceLinea(r.clave, r.texto.get("cuil", ""), ln.fila, r.errores, estado,
+                                 correccion, pendientes, g))
 
-    aceptadas_mod = 0
+    aceptadas = 0
     if ok:
         for r in ok.registros:
             ln = por_clave.get(r.clave)
-            if ln and ln.modificados():
-                aceptadas_mod += 1
+            g = grupo_de.get(ln.fila) if ln else None
+            if g is not None and g.tiene_propuesta:
+                aceptadas += 1
 
     return ResultadoCruce(lineas=lineas, por_codigo=cnt_cod, por_estado=Counter(l.estado for l in lineas),
-                          aceptadas_modificadas=aceptadas_mod,
-                          total_ok=len(ok.registros) if ok else 0,
+                          aceptadas_que_cambian=aceptadas, total_ok=len(ok.registros) if ok else 0,
                           total_err=len(lineas))

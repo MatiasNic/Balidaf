@@ -41,7 +41,7 @@ def _cli(args) -> int:
         guardar(r, args.output, log=log)
         cruce = None
         if args.err or args.ok:
-            cruce = cruzar(r.lote, r.despues, leer_txt(args.err, "ERR") if args.err else None,
+            cruce = cruzar(r, leer_txt(args.err, "ERR") if args.err else None,
                            leer_txt(args.ok, "OK") if args.ok else None)
             log("titulo", "Cruce con la devolución de la SSS")
             for est, n in cruce.por_estado.items():

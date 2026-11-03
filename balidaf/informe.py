@@ -11,6 +11,7 @@ from typing import Optional
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 
+from .balanceo import APLICADA, PENDIENTE
 from .devolucion import ResultadoCruce
 from .proceso import Resultado
 from .schema import CODIGOS, COL
@@ -38,10 +39,11 @@ def exportar(r: Resultado, destino: str, cruce: Optional[ResultadoCruce] = None)
     ws.append(["Balidaf – Informe de balanceo"]); ws["A1"].font = Font(bold=True, size=14)
     ws.append([])
     for k, v in [("Archivo", os.path.basename(r.lote.ruta)), ("Líneas", len(r.lote.lineas)),
-                 ("Grupos", len(r.grupos)), ("Grupos balanceados", r.grupos_modificados),
+                 ("Grupos", len(r.grupos)), ("Grupos corregidos (aplicados)", len(r.grupos_con(APLICADA))),
+                 ("Grupos con corrección pendiente", len(r.grupos_con(PENDIENTE))),
                  ("Líneas modificadas", r.lineas_modificadas),
                  ("Líneas con retenciones reducidas", r.lineas_ret_reducidas),
-                 ("Errores antes", r.errores_antes), ("Errores después", r.errores_despues),
+                 ("Errores antes", r.errores_antes), ("Errores actuales", r.errores_actuales),
                  ("Advertencias", r.advertencias),
                  ("Listo para Presmed", "SÍ" if r.listo_para_presmed else "NO")]:
         ws.append([k, v])
@@ -65,7 +67,7 @@ def exportar(r: Resultado, destino: str, cruce: Optional[ResultadoCruce] = None)
 
     ws = wb.create_sheet("Validación")
     _encabezado(ws, ["Fila", "Clave", "CUIL", "Código", "Nivel", "Campo", "Descripción", "Detalle"])
-    for h in r.despues:
+    for h in r.actual:
         ws.append([h.fila, h.clave, h.cuil, h.codigo, h.nivel, h.campo, h.descripcion, h.detalle])
 
     ws = wb.create_sheet("Validación original")
@@ -75,11 +77,12 @@ def exportar(r: Resultado, destino: str, cruce: Optional[ResultadoCruce] = None)
 
     if cruce:
         ws = wb.create_sheet("Devolución SSS")
-        _encabezado(ws, ["Clave", "CUIL", "Fila Excel", "Errores SSS", "Descripción", "Estado", "Errores actuales"])
+        _encabezado(ws, ["Clave", "CUIL", "Fila Excel", "Errores SSS", "Descripción", "Estado",
+                         "Corrección", "Errores que quedan"])
         for c in cruce.lineas:
             ws.append([c.clave, c.cuil, c.fila or "", " ".join(c.codigos_sss),
                        " | ".join(CODIGOS[x].descripcion for x in c.codigos_sss if x in CODIGOS),
-                       c.estado, " ".join(c.errores_actuales)])
+                       c.estado, c.correccion, " ".join(c.pendientes)])
 
     wb.save(destino)
     return destino

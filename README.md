@@ -10,39 +10,55 @@ Excel (Presmed) ──► Balidaf ──► Excel balanceado (limpio) ──► 
                          Balidaf «Devolución SSS» ◄── DEVOLUCION_OK.txt / DEVOLUCION_ERR.txt
 ```
 
-## Qué hace
+## Cómo se usa (el programa propone, vos decidís)
+
+**Pestaña «1 · Balancear»**
+
+1. **Paso 1:** «Examinar…» → elegí el Excel **original** de Presmed → **«Analizar»**.
+   Un panel azul muestra el avance: *Leer el Excel › Revisar reglas › Calcular la corrección › Validar*.
+2. **Paso 2:** aparece la lista de **correcciones propuestas** (una fila por grupo). **Todavía no se aplicó nada.**
+   Al hacer clic en un grupo, abajo se ve cada línea con el **original → corregido**.
+   - **«Aplicar todas»** o seleccioná algunas (Ctrl / Shift) y **«Aplicar seleccionadas»**.
+   - **«Deshacer seleccionadas»** vuelve esos grupos a los valores originales.
+3. **Paso 3:** **«Guardar Excel para Presmed»** → genera `<archivo>_balidaf.xlsx` con lo aplicado
+   (sin colores ni hojas nuevas). El original no se toca.
+
+**Pestaña «2 · Devolución SSS»** (cuando la SSS rechaza líneas)
+
+1. Analizá el Excel original en «1 · Balancear».
+2. **«Cargar TXT de errores (_ERR)»** (y, si querés, el `_OK`).
+3. Para cada línea rechazada se ve: el error de la SSS y su descripción, el **estado** y la
+   **corrección propuesta (original → corregido)**. Estados:
+   - *Corrección propuesta (sin aplicar)*: Balidaf sabe corregirla; vos decidís.
+   - *Corrección aplicada*: ya la aplicaste.
+   - *Requiere corrección manual*: hay que corregir un dato en el Excel (columna «Qué falta»).
+   - *Lo resuelve Sistemas / Presmed*: por ejemplo 604 / 699.
+4. **«Corregir seleccionadas en el Excel»** o **«Corregir todas las que tienen propuesta»**, y después guardás en «1 · Balancear».
+
+> Si corregís **sólo** los grupos rechazados, pueden quedar diferencias de centavos en líneas que la SSS
+> aceptó (las tolera). Aplicando **todas** las correcciones el Excel queda exacto.
+
+**Pestaña «Ver Excel»:** el Excel completo con los valores actuales; colores sólo en pantalla
+(pendiente / corregida / retenciones reducidas / error). Doble clic: detalle de la línea y su grupo.
+
+**Pestaña «Reglas de balanceo»:** la lógica completa con los nombres de las columnas y todos los controles de la SSS.
+
+## Qué hace el balanceo
 
 | Paso | Detalle |
 |---|---|
-| **Agrupa** | Por **CUIL + período de presentación + período de prestación + código de práctica** (la clave de la regla 624). Ya no hace falta la columna `CONCATENAR`. |
-| **Balancea** | Reparte el subsidio de cada grupo entre sus líneas sin superar lo solicitado. Primero cubre las líneas **con retenciones**, para que el transferido nunca quede negativo. |
-| **Ajusta retenciones** | Si el subsidio no alcanza para cubrir las retenciones de una línea, las reduce (ganancias → IIBB → otras) y el transferido queda en 0. |
-| **Valida** | Todas las reglas del Anexo III: 600, 601, 605, 606, 607, 609, 610, 611, 612, 613, 614, 615, 616, 617, 618, 619, 621, **622, 623, 624** y 625. Además, controles propios (B01–B06). |
-| **Guarda** | `<archivo>_balidaf.xlsx`: **solo cambia valores**, sin colores, formatos, fórmulas ni hojas nuevas. Listo para Presmed. |
-| **Cruza la devolución** | Cargando los TXT `_ERR` / `_OK` de la SSS, muestra cada rechazo, su descripción y si el balanceo lo corrige. |
+| **Agrupa** | Por **CUIL + período de presentación + período de prestación + código de práctica** (regla 624). No hace falta `CONCATENAR`. |
+| **Reparte** | El subsidio del grupo entre sus líneas, sin superar lo solicitado; primero las líneas **con retenciones** (el transferido nunca queda negativo). |
+| **Ajusta retenciones** | Si el subsidio no alcanza para cubrirlas, las reduce (ganancias → IIBB → otras) y el transferido queda en 0. |
+| **No toca** | Los grupos que ya cumplen las reglas 622, 623 y 624. |
+| **Valida** | Todas las reglas del Anexo III (600–625) + controles propios (B01–B06). |
 
 ### Columnas que Balidaf puede modificar
 
 `impor_apli_sss`, `importe_transferido`, `fdo_ppio_ingre_cta_disca` y, solo cuando el subsidio no alcanza,
 `retencion_ganancias` / `retencion_IIBB` / `otras_retnciones`.
-**Nunca** modifica los campos 2 a 9 (RNOS, tipo, períodos, CUIL, práctica, subsidiado, solicitado), que la
-SSS exige idénticos al DR.ENVIO (error 602). Tampoco modifica CUIT, CBU, órdenes de pago ni fechas.
-
-Las fórmulas 623 y 624 también tienen en cuenta `fdo_ppio_otras_ctas`, `reversion_import_trasl`,
-`import_devuelto_cta_sss`, `saldo_no_apli` y `recup_fdos_ppios` si tienen valores.
-
-## Pantallas
-
-| Pestaña | Contenido |
-|---|---|
-| **Resumen** | Indicadores (líneas, grupos, cambios, errores antes/después) y tabla de **todas las reglas de la SSS** con su resultado. |
-| **Validación SSS** | Cada hallazgo con fila, clave, CUIL, código y detalle. Filtros por código, nivel y búsqueda. Se puede ver el Excel original o el balanceado. |
-| **Excel resultante** | El Excel completo, tal como se va a guardar. Colores **solo en pantalla** (modificada / retención reducida / error / advertencia). Doble clic: detalle de la línea y de su grupo. |
-| **Devolución SSS** | Carga de los TXT `_ERR` y `_OK`, resumen por código de error y estado de cada línea rechazada. |
-| **Registro** | Bitácora del proceso, con colores; se puede guardar en .txt. |
-
-**Exportar informe…** genera un Excel **aparte** (no es el de Presmed) con las hojas Resumen, Cambios
-(antes/después), Validación y Devolución SSS.
+**Nunca** modifica los campos 2 a 9 (RNOS, tipo, períodos, CUIL, práctica, subsidiado, solicitado), CUIT, CBU,
+órdenes de pago ni fechas.
 
 ## Estructura del proyecto
 
@@ -59,7 +75,7 @@ Balidaf/
 │   ├── devolucion.py       ← cruce de la devolución SSS con el Excel
 │   ├── proceso.py          ← orquesta todo (GUI y consola)
 │   ├── informe.py          ← informe de detalle (Excel aparte)
-│   └── gui/                ← interfaz (app.py, tabs.py, widgets.py)
+│   └── gui/                ← interfaz: app.py (ventana), tabs.py (pestañas), widgets.py
 ├── docs/ANALISIS_202606.md ← análisis de la rendición 202606 que originó esta versión
 ├── tests/                  ← pruebas automáticas (pytest)
 ├── scripts/
@@ -78,7 +94,7 @@ Balidaf/
 ## Uso por consola
 
 ```bat
-python main.py archivo.xlsx
+python main.py archivo.xlsx            :: analiza, aplica todas las correcciones y guarda
 python main.py archivo.xlsx --err 900805-202606_DR.DEVOLUCION_ERR.txt --ok 900805-202606_DR.DEVOLUCION_OK.txt --informe
 ```
 
