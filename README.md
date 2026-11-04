@@ -49,6 +49,14 @@ Excel (Presmed) ──► Balidaf ──► Excel balanceado (limpio) ──► 
 
 **Pestaña «Reglas de balanceo»:** la lógica completa con los nombres de las columnas y todos los controles de la SSS.
 
+## Interfaz
+
+Basada en el rediseño de Claude Design (`design_handoff_balidaf`): encabezado con el archivo cargado y el
+botón ☾/☀, barra de progreso integrada (pasos + porcentaje + línea de 3 px), pestañas con contadores,
+pie «Paso 3 · Guardar», indicadores que filtran al hacer clic, tablas con casillas y orden ▲/▼, diálogos
+de confirmación con resumen, aviso flotante con «Deshacer» y modo claro/oscuro. Usa IBM Plex Sans/Mono si
+están instaladas en Windows; si no, Segoe UI/Consolas.
+
 ## Qué hace el balanceo
 
 | Paso | Detalle |
@@ -81,7 +89,12 @@ Balidaf/
 │   ├── devolucion.py       ← cruce de la devolución SSS con el Excel
 │   ├── proceso.py          ← orquesta todo (GUI y consola)
 │   ├── informe.py          ← informe de detalle (Excel aparte)
-│   └── gui/                ← interfaz: app.py (ventana), tabs.py (pestañas), widgets.py
+│   └── gui/                ← interfaz (rediseño):
+│       ├── app.py          ← ventana: encabezado, progreso, pestañas, pie «Guardar», tareas
+│       ├── tema.py         ← tokens de color claro/oscuro, tipografías y estilos ttk
+│       ├── componentes.py  ← tarjetas, indicadores, avisos, segmentados, tablas, toast, diálogos
+│       ├── pag_balancear.py · pag_devolucion.py · pag_excel.py · pag_reglas.py
+│       └── detalle.py      ← ventana «Detalle de línea»
 ├── docs/
 │   ├── ANALISIS_202606.md      ← análisis de la rendición 202606 que originó esta versión
 │   ├── LOGICA_DEL_PROGRAMA.md  ← funcionamiento y reglas de balanceo
