@@ -51,11 +51,14 @@ Excel (Presmed) ──► Balidaf ──► Excel balanceado (limpio) ──► 
 
 ## Interfaz
 
-Basada en el rediseño de Claude Design (`design_handoff_balidaf`): encabezado con el archivo cargado y el
-botón ☾/☀, barra de progreso integrada (pasos + porcentaje + línea de 3 px), pestañas con contadores,
-pie «Paso 3 · Guardar», indicadores que filtran al hacer clic, tablas con casillas y orden ▲/▼, diálogos
-de confirmación con resumen, aviso flotante con «Deshacer» y modo claro/oscuro. Usa IBM Plex Sans/Mono si
-están instaladas en Windows; si no, Segoe UI/Consolas.
+La pantalla está hecha en **HTML** con el diseño de Claude Design (`design_handoff_balidaf`) y se abre en
+una **ventana propia** del programa (pywebview + WebView2, incluido en Windows 10/11). La letra **IBM Plex**
+viene incluida en `balidaf/web/fonts` (licencia OFL), así que se ve igual en cualquier PC.
+
+- `balidaf/web/index.html`, `app.css`, `app.js` → la interfaz (tablas que sólo dibujan las filas visibles).
+- `balidaf/web/api.py` → puente entre la interfaz y el motor de Python (el cálculo no cambió).
+- `balidaf/web/ventana.py` → abre la ventana; si pywebview no está instalado, abre la misma pantalla en el
+  navegador (`python main.py --navegador`).
 
 ## Qué hace el balanceo
 
@@ -89,12 +92,11 @@ Balidaf/
 │   ├── devolucion.py       ← cruce de la devolución SSS con el Excel
 │   ├── proceso.py          ← orquesta todo (GUI y consola)
 │   ├── informe.py          ← informe de detalle (Excel aparte)
-│   └── gui/                ← interfaz (rediseño):
-│       ├── app.py          ← ventana: encabezado, progreso, pestañas, pie «Guardar», tareas
-│       ├── tema.py         ← tokens de color claro/oscuro, tipografías y estilos ttk
-│       ├── componentes.py  ← tarjetas, indicadores, avisos, segmentados, tablas, toast, diálogos
-│       ├── pag_balancear.py · pag_devolucion.py · pag_excel.py · pag_reglas.py
-│       └── detalle.py      ← ventana «Detalle de línea»
+│   └── web/                ← interfaz (HTML + ventana propia)
+│       ├── index.html · app.css · app.js   ← pantallas del diseño
+│       ├── api.py          ← puente interfaz ↔ motor
+│       ├── ventana.py      ← abre la ventana (o el navegador)
+│       └── fonts/          ← IBM Plex Sans / Mono
 ├── docs/
 │   ├── ANALISIS_202606.md      ← análisis de la rendición 202606 que originó esta versión
 │   ├── LOGICA_DEL_PROGRAMA.md  ← funcionamiento y reglas de balanceo

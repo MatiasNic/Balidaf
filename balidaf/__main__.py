@@ -62,18 +62,27 @@ def main(argv=None) -> int:
     p.add_argument("--err", help="TXT de errores de la SSS (_DR.DEVOLUCION_ERR.txt) para cruzar.")
     p.add_argument("--ok", help="TXT de aceptados de la SSS (_DR.DEVOLUCION_OK.txt) para cruzar.")
     p.add_argument("--informe", action="store_true", help="Exportar el informe de detalle (Excel aparte).")
+    p.add_argument("--navegador", action="store_true", help="Abrir la interfaz en el navegador (sin ventana propia).")
+    p.add_argument("--puerto", type=int, default=0, help="Puerto para --navegador (0 = automático).")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     args = p.parse_args(argv)
 
     if args.excel:
         return _cli(args)
     try:
-        from .gui import run_gui
-        run_gui()
+        from .web.ventana import run, servir_en_navegador
+        if args.navegador:
+            srv = servir_en_navegador(args.puerto)
+            try:
+                srv.serve_forever()
+            except KeyboardInterrupt:
+                pass
+        else:
+            run()
         return 0
     except Exception:
-        write_error_log("ERROR INICIALIZANDO GUI:")
-        print("ERROR: No fue posible iniciar la interfaz gráfica.")
+        write_error_log("ERROR INICIALIZANDO LA INTERFAZ:")
+        print("ERROR: No fue posible iniciar la interfaz. Ver balidaf_errores.log")
         return 2
 
 

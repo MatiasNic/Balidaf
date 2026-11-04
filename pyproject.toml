@@ -3,13 +3,13 @@ name = "balidaf"
 version = "2.0.0"
 description = "Balidaf – Balanceo de subsidios - IDAF"
 requires-python = ">=3.8"
-dependencies = ["openpyxl>=3.1"]
+dependencies = ["openpyxl>=3.1", "pywebview>=5.0"]
 
 [project.scripts]
 balidaf = "balidaf.__main__:main"
 
 [tool.setuptools]
-packages = ["balidaf", "balidaf.gui"]
+packages = ["balidaf", "balidaf.web"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
